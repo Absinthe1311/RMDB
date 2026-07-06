@@ -85,7 +85,25 @@ void SmManager::drop_db(const std::string& db_name) {
  * @param {string&} db_name 数据库名称，与文件夹同名
  */
 void SmManager::open_db(const std::string& db_name) {
-    
+    // 1. 数据库对应的文件夹必须存在
+    if (!is_dir(db_name)) {
+        throw DatabaseNotFoundError(db_name);
+    }
+
+    // 2. 进入该数据库对应的目录
+    if (chdir(db_name.c_str()) < 0) {
+        throw UnixError();
+    }
+
+    // 3. 读取并恢复数据库元数据
+    std::ifstream ifs(DB_META_NAME);
+    ifs >> db_;   // 依赖已经定义好的 operator>>，将文件内容反序列化到 db_ 中
+
+    // 4. 为每张表打开对应的记录文件句柄
+    for (auto &entry : db_.tabs_) {
+        auto &tab_name = entry.first;
+        fhs_.emplace(tab_name, rm_manager_->open_file(tab_name));
+    }
 }
 
 /**
@@ -101,7 +119,29 @@ void SmManager::flush_meta() {
  * @description: 关闭数据库并把数据落盘
  */
 void SmManager::close_db() {
-    
+    // 1. 把内存中的元数据写回磁盘
+    flush_meta();
+
+    // 2. 关闭所有已打开的记录文件句柄
+    for (auto &entry : fhs_) {
+        rm_manager_->close_file(entry.second.get());
+    }
+    fhs_.clear();
+
+    // 3. 关闭所有已打开的索引句柄
+    for (auto &entry : ihs_) {
+        ix_manager_->close_index(entry.second.get());
+    }
+    ihs_.clear();
+
+    // 4. 清空内存中的数据库元数据
+    db_.name_.clear();
+    db_.tabs_.clear();
+
+    // 5. 回到上一级目录
+    if (chdir("..") < 0) {
+        throw UnixError();
+    }
 }
 
 /**
@@ -188,7 +228,30 @@ void SmManager::create_table(const std::string& tab_name, const std::vector<ColD
  * @param {Context*} context
  */
 void SmManager::drop_table(const std::string& tab_name, Context* context) {
-    
+    // 1. 表必须存在
+    if (!db_.is_table(tab_name)) {
+        throw TableNotFoundError(tab_name);
+    }
+
+    TabMeta &tab = db_.get_table(tab_name);
+
+    // 2. 若表上存在索引，先逐一删除索引
+    //    拷贝一份索引列表再遍历，因为drop_index内部会修改tab.indexes，直接遍历原容器会有迭代器失效风险
+    auto indexes = tab.indexes;
+    for (auto &index : indexes) {
+        drop_index(tab_name, index.cols, context);
+    }
+
+    // 3. 关闭并销毁该表的记录文件
+    rm_manager_->close_file(fhs_.at(tab_name).get());
+    rm_manager_->destroy_file(tab_name);
+    fhs_.erase(tab_name);
+
+    // 4. 从数据库元数据中移除该表
+    db_.tabs_.erase(tab_name);
+
+    // 5. 元数据落盘
+    flush_meta();
 }
 
 /**
@@ -198,7 +261,63 @@ void SmManager::drop_table(const std::string& tab_name, Context* context) {
  * @param {Context*} context
  */
 void SmManager::create_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
-    
+    // 1. 表必须存在
+    TabMeta &tab = db_.get_table(tab_name);
+
+    // 2. 收集索引列的元数据
+    std::vector<ColMeta> col_metas;
+    for (auto &col_name : col_names) {
+        col_metas.push_back(*tab.get_col(col_name));
+    }
+
+    // 3. 该索引不能重复创建
+    if (tab.is_index(col_names)) {
+        throw IndexExistsError(tab_name, col_names);
+    }
+
+    // 4. 创建索引文件
+    ix_manager_->create_index(tab_name, col_metas);
+
+    // 5. 打开索引句柄
+    auto ih = ix_manager_->open_index(tab_name, col_metas);
+
+    // 6. 扫描表中已有的记录，逐条插入索引
+    RmFileHandle *fh = fhs_.at(tab_name).get();
+    for (RmScan scan(fh); !scan.is_end(); scan.next()) {
+        Rid rid = scan.rid();
+        auto record = fh->get_record(rid, context);
+
+        // 从记录中抽取索引列对应的数据，拼接成索引key
+        char *key = new char[col_metas[0].len * 0 + [&]{
+            int len = 0;
+            for (auto &col : col_metas) len += col.len;
+            return len;
+        }()];
+        int offset = 0;
+        for (auto &col : col_metas) {
+            memcpy(key + offset, record->data + col.offset, col.len);
+            offset += col.len;
+        }
+
+        ih->insert_entry(key, rid, context->txn_);
+        delete[] key;
+    }
+
+    // 7. 记录索引句柄，更新表元数据
+    ihs_.emplace(ix_manager_->get_index_name(tab_name, col_metas), std::move(ih));  
+
+    IndexMeta index_meta;
+    index_meta.tab_name = tab_name;
+    index_meta.col_num = static_cast<int>(col_names.size());
+    index_meta.cols = col_metas;
+    tab.indexes.push_back(index_meta);
+
+    for (auto &col_name : col_names) {
+        tab.get_col(col_name)->index = true;
+    }
+
+    // 8. 元数据落盘
+    flush_meta();    
 }
 
 /**
@@ -208,7 +327,14 @@ void SmManager::create_index(const std::string& tab_name, const std::vector<std:
  * @param {Context*} context
  */
 void SmManager::drop_index(const std::string& tab_name, const std::vector<std::string>& col_names, Context* context) {
-    
+    TabMeta &tab = db_.get_table(tab_name);
+
+    std::vector<ColMeta> col_metas;
+    for (auto &col_name : col_names) {
+        col_metas.push_back(*tab.get_col(col_name));
+    }
+
+    drop_index(tab_name, col_metas, context);    
 }
 
 /**
@@ -218,5 +344,46 @@ void SmManager::drop_index(const std::string& tab_name, const std::vector<std::s
  * @param {Context*} context
  */
 void SmManager::drop_index(const std::string& tab_name, const std::vector<ColMeta>& cols, Context* context) {
-    
+    TabMeta &tab = db_.get_table(tab_name);
+
+    std::vector<std::string> col_names;
+    for (auto &col : cols) {
+        col_names.push_back(col.name);
+    }
+
+    // 1. 索引必须存在
+    if (!tab.is_index(col_names)) {
+        throw IndexNotFoundError(tab_name, col_names);
+    }
+
+    // 2. 关闭并销毁索引文件
+    std::string index_name = ix_manager_->get_index_name(tab_name, cols);
+    ix_manager_->close_index(ihs_.at(index_name).get());
+    ix_manager_->destroy_index(tab_name, cols);
+    ihs_.erase(index_name);
+
+    // 3. 从表元数据中移除该索引
+    auto it = tab.get_index_meta(col_names);
+    tab.indexes.erase(it);
+
+    // 4. 若某列不再被任何索引覆盖，重置其index标记为false
+    for (auto &col_name : col_names) {
+        bool still_indexed = false;
+        for (auto &index : tab.indexes) {
+            auto it = std::find_if(index.cols.begin(), index.cols.end(),
+                                    [&](const ColMeta &col) {
+                                        return col.tab_name == tab_name && col.name == col_name;
+                                    });
+            if (it != index.cols.end()) {
+                still_indexed = true;
+                break;
+            }
+        }
+        if (!still_indexed) {
+            tab.get_col(col_name)->index = false;
+        }
+    }
+
+    // 5. 元数据落盘
+    flush_meta();
 }

@@ -1,0 +1,6 @@
+| naem | id | score |
+| naem | id | score |
+| name1 | 1 | 90.500000 |
+| naem | id | score |
+| name1 | 1 | 90.500000 |
+| name2 | 2 | 91.500000 |

@@ -121,7 +121,7 @@ std::shared_ptr<Query> Planner::logical_optimization(std::shared_ptr<Query> quer
 {
     
     //TODO 实现逻辑优化规则
-
+    // 看看不做能否过
     return query;
 }
 

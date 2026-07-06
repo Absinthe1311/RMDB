@@ -23,7 +23,11 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         // 处理表名
         query->tables = std::move(x->tabs);
         /** TODO: 检查表是否存在 */
-
+        for (auto &tab_name : query->tables) {
+            if (!sm_manager_->db_.is_table(tab_name)) {
+                throw TableNotFoundError(tab_name);
+            }
+        }
         // 处理target list，再target list中添加上表名，例如 a.id
         for (auto &sv_sel_col : x->cols) {
             TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
@@ -49,6 +53,41 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         check_clause(query->tables, query->conds);
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
+        // 表名单独处理（UpdateStmt通常只涉及一张表）
+        query->tables = {x->tab_name};
+
+        // 检查表是否存在
+        if (!sm_manager_->db_.is_table(x->tab_name)) {
+            throw TableNotFoundError(x->tab_name);
+        }
+
+        // 获取该表的全部列元数据，用于校验SET子句里的列名和WHERE条件里的列名
+        std::vector<ColMeta> all_cols;
+        get_all_cols(query->tables, all_cols);
+
+        // 处理SET子句：将 (列名, 新值) 转成 SetClause 存入 query->set_clauses
+        for (auto &sv_set_clause : x->set_clauses) {
+            SetClause set_clause;
+            set_clause.lhs = {.tab_name = x->tab_name, .col_name = sv_set_clause->col_name};
+            // 校验SET左侧的列确实存在于该表
+            set_clause.lhs = check_column(all_cols, set_clause.lhs);
+            set_clause.rhs = convert_sv_value(sv_set_clause->val);
+
+        // 直接用find_if查找对应列的元数据，取其长度用于init_raw
+        auto col_pos = std::find_if(all_cols.begin(), all_cols.end(), [&](const ColMeta &col) {
+            return col.tab_name == set_clause.lhs.tab_name && col.name == set_clause.lhs.col_name;
+        });
+        if (col_pos == all_cols.end()) {
+            throw ColumnNotFoundError(set_clause.lhs.col_name);
+        }
+        set_clause.rhs.init_raw(col_pos->len);
+            
+            query->set_clauses.push_back(set_clause);
+        }
+
+        // 处理WHERE条件
+        get_clause(x->conds, query->conds);
+        check_clause(query->tables, query->conds);
 
     } else if (auto x = std::dynamic_pointer_cast<ast::DeleteStmt>(parse)) {
         //处理where条件
@@ -85,7 +124,16 @@ TabCol Analyze::check_column(const std::vector<ColMeta> &all_cols, TabCol target
         target.tab_name = tab_name;
     } else {
         /** TODO: Make sure target column exists */
-        
+        bool found = false;
+        for (auto &col : all_cols) {
+            if (col.tab_name == target.tab_name && col.name == target.col_name) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw ColumnNotFoundError(target.tab_name + '.' + target.col_name);
+        }  
     }
     return target;
 }
