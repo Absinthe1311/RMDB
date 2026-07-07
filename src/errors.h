@@ -165,3 +165,8 @@ class ValueOutOfRangeError : public RMDBError {
     ValueOutOfRangeError()
         : RMDBError("Value out of range") {}
 };
+
+class DatetimeFormatError : public RMDBError {
+   public:
+    DatetimeFormatError() : RMDBError("Invalid datetime value") {}
+};

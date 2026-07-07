@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
+#include "common/datetime_util.h"
 
 class UpdateExecutor : public AbstractExecutor {
    private:
@@ -66,6 +67,8 @@ class UpdateExecutor : public AbstractExecutor {
                 if (col->type != val.type) {
                     if (col->type == TYPE_BIGINT && val.type == TYPE_INT) {
                         val.set_bigint(static_cast<int64_t>(val.int_val));
+                    }else if(col->type == TYPE_DATETIME && val.type == TYPE_STRING){
+                        val.set_datetime(encode_datetime(val.str_val));
                     } else {
                         throw IncompatibleTypeError(coltype2str(col->type), coltype2str(val.type));
                     }

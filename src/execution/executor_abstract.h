@@ -72,6 +72,10 @@ protected:
                 int64_t ia = *(int64_t *) a, ib = *(int64_t *) b;
                 return (ia > ib) - (ia < ib);
             }
+            case TYPE_DATETIME:{
+                int64_t ia = *(int64_t *) a, ib = *(int64_t *) b;
+                return (ia > ib) - (ia < ib);
+            }
             default:
                 throw InternalError("Unexpected data type");
         }

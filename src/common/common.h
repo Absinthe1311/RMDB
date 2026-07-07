@@ -39,6 +39,11 @@ struct Value {
 
     std::shared_ptr<RmRecord> raw;  // raw record buffer
 
+    void set_datetime(int64_t datetime_val_){
+        type = TYPE_DATETIME;
+        bigint_val = datetime_val_;
+    }
+
     void set_int(int int_val_) {
         type = TYPE_INT;
         int_val = int_val_;
@@ -75,6 +80,9 @@ struct Value {
             memset(raw->data, 0, len);
             memcpy(raw->data, str_val.c_str(), str_val.size());
         }  else if (type == TYPE_BIGINT) {
+            assert(len == sizeof(int64_t));
+            *(int64_t *)(raw->data) = bigint_val;
+        } else if (type == TYPE_DATETIME) {
             assert(len == sizeof(int64_t));
             *(int64_t *)(raw->data) = bigint_val;
         }

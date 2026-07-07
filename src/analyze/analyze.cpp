@@ -9,6 +9,7 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "analyze.h"
+#include "common/datetime_util.h"
 
 /**
  * @description: 分析器，进行语义分析和查询重写，需要检查不符合语义规定的部分
@@ -80,6 +81,17 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         if (col_pos == all_cols.end()) {
             throw ColumnNotFoundError(set_clause.lhs.col_name);
         }
+
+        if (col_pos->type != set_clause.rhs.type) {
+            if (col_pos->type == TYPE_BIGINT && set_clause.rhs.type == TYPE_INT) {
+                set_clause.rhs.set_bigint(static_cast<int64_t>(set_clause.rhs.int_val));
+            } else if (col_pos->type == TYPE_DATETIME && set_clause.rhs.type == TYPE_STRING) {
+                set_clause.rhs.set_datetime(encode_datetime(set_clause.rhs.str_val));
+            } else {
+                throw IncompatibleTypeError(coltype2str(col_pos->type), coltype2str(set_clause.rhs.type));
+            }
+        }
+
         set_clause.rhs.init_raw(col_pos->len);
             
             query->set_clauses.push_back(set_clause);
@@ -215,6 +227,9 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
                 if (lhs_type == TYPE_BIGINT && rhs_type == TYPE_INT) {
                     cond.rhs_val.set_bigint(static_cast<int64_t>(cond.rhs_val.int_val));
                     rhs_type = TYPE_BIGINT;
+                }else if(lhs_type == TYPE_DATETIME && rhs_type == TYPE_STRING){
+                    cond.rhs_val.set_datetime(encode_datetime(cond.rhs_val.str_val));
+                    rhs_type = TYPE_DATETIME;
                 } else {
                     throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
                 }

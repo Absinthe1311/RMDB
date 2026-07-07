@@ -325,8 +325,11 @@ src/analyze/CMakeFiles/analyze.dir/analyze.cpp.o: ../src/analyze/analyze.cpp \
   /usr/include/c++/11/condition_variable \
   ../src/recovery/log_manager.h \
   ../src/recovery/log_defs.h \
-  ../src/common/common.h
+  ../src/common/common.h \
+  ../src/common/datetime_util.h
 
+
+../src/common/datetime_util.h:
 
 ../src/recovery/log_defs.h:
 

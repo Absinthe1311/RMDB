@@ -338,6 +338,7 @@ src/optimizer/CMakeFiles/planner.dir/planner.cpp.o: ../src/optimizer/planner.cpp
   ../src/execution/executor_delete.h \
   ../src/execution/executor_index_scan.h \
   ../src/execution/executor_insert.h \
+  ../src/common/datetime_util.h \
   ../src/execution/executor_nestedloop_join.h \
   ../src/execution/executor_projection.h \
   ../src/execution/executor_seq_scan.h \
@@ -377,6 +378,8 @@ src/optimizer/CMakeFiles/planner.dir/planner.cpp.o: ../src/optimizer/planner.cpp
 ../src/execution/executor_update.h:
 
 ../src/execution/executor_nestedloop_join.h:
+
+../src/common/datetime_util.h:
 
 ../src/transaction/transaction_manager.h:
 
