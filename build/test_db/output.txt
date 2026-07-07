@@ -1,57 +1,37 @@
 | Tables |
-| t1 |
-| Tables |
-| t1 |
-| t2 |
-| Tables |
-| t2 |
-| Tables |
-| name | id | score |
-| Data Structure | 1 | 90.500000 |
-| Data Structure | 2 | 95.000000 |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
 failure
-| name | id | score |
-| data structure | 1 | 90.500000 |
-| data structure | 2 | 95.000000 |
-failure
-| name | id | score |
-| data structure | 1 | 90.500000 |
-| data structure | 2 | 95.000000 |
-| 1 | 1 | 90.500000 |
-| name | id | score |
-| data structure | 1 | 90.500000 |
-| data structure | 2 | 95.000000 |
-| 1 | 1 | 90.500000 |
-| name | id | score |
-| data structure | 1 | 90.500000 |
-| data structure | 2 | 95.000000 |
-| 1 | 1 | 90.500000 |
-| name | id | score |
-| data structure | 1 | 90.500000 |
-| data structure | 2 | 95.000000 |
-| 1 | 1 | 90.500000 |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
 | Tables |
-| grade |
-| name | id | score |
-| name | id | score |
-| name1 | 1 | 90.099998 |
-| name | id | score |
-| name1 | 1 | 90.099998 |
-| name2 | 2 | 90.500000 |
-| name | id | score |
-| name1 | 1 | 0.000000 |
-| name2 | 2 | 90.500000 |
-| name | id | score |
-| name1 | 1 | 999.500000 |
-| name2 | 2 | 90.500000 |
-| name | id | score |
-| name2 | 2 | 90.500000 |
-| d_name | id |
-| 12345 | 1 |
-| 23456 | 2 |
-| id | t_name | d_name |
-| 1 | aaa | 12345 |
-| 2 | baa | 23456 |
-| id | t_name | d_name |
-| 1 | aaa | 12345 |
-| 2 | baa | 23456 |
+| t |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
+| 1 | 2 |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
+| 1 | 2 |
+| 999999999999999999 | 1 |
+failure
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
+| 1 | 2 |
+| 999999999999999999 | 1 |
+| Tables |
+| t |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |
+| 1 | 2 |
+| bid | sid |
+| 372036854775807 | 233421 |
+| -922337203685477580 | 124332 |

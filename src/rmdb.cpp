@@ -122,9 +122,60 @@ void *client_handler(void *sock_fd) {
         bool finish_analyze = false;
         pthread_mutex_lock(buffer_mutex);
         YY_BUFFER_STATE buf = yy_scan_string(data_recv);
-        if (yyparse() == 0) {
-            if (ast::parse_tree != nullptr) {
-                try {
+
+
+
+        // if (yyparse() == 0) {
+        //     if (ast::parse_tree != nullptr) {
+        //         try {
+        //             // analyze and rewrite
+        //             std::shared_ptr<Query> query = analyze->do_analyze(ast::parse_tree);
+        //             yy_delete_buffer(buf);
+        //             finish_analyze = true;
+        //             pthread_mutex_unlock(buffer_mutex);
+        //             // 优化器
+        //             std::shared_ptr<Plan> plan = optimizer->plan_query(query, context);
+        //             // portal
+        //             std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context);
+        //             portal->run(portalStmt, ql_manager.get(), &txn_id, context);
+        //             portal->drop();
+        //         } catch (TransactionAbortException &e) {
+        //             // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
+        //             std::string str = "abort\n";
+        //             memcpy(data_send, str.c_str(), str.length());
+        //             data_send[str.length()] = '\0';
+        //             offset = str.length();
+
+        //             // 回滚事务
+        //             txn_manager->abort(context->txn_, log_manager.get());
+        //             std::cout << e.GetInfo() << std::endl;
+
+        //             std::fstream outfile;
+        //             outfile.open("output.txt", std::ios::out | std::ios::app);
+        //             outfile << str;
+        //             outfile.close();
+        //         } catch (RMDBError &e) {
+        //             // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
+        //             std::cerr << e.what() << std::endl;
+
+        //             memcpy(data_send, e.what(), e.get_msg_len());
+        //             data_send[e.get_msg_len()] = '\n';
+        //             data_send[e.get_msg_len() + 1] = '\0';
+        //             offset = e.get_msg_len() + 1;
+
+        //             // 将报错信息写入output.txt
+        //             std::fstream outfile;
+        //             outfile.open("output.txt",std::ios::out | std::ios::app);
+        //             outfile << "failure\n";
+        //             outfile.close();
+        //         }
+        //     }
+        // }
+
+
+        try {
+            if (yyparse() == 0) {
+                if (ast::parse_tree != nullptr) {
                     // analyze and rewrite
                     std::shared_ptr<Query> query = analyze->do_analyze(ast::parse_tree);
                     yy_delete_buffer(buf);
@@ -136,38 +187,40 @@ void *client_handler(void *sock_fd) {
                     std::shared_ptr<PortalStmt> portalStmt = portal->start(plan, context);
                     portal->run(portalStmt, ql_manager.get(), &txn_id, context);
                     portal->drop();
-                } catch (TransactionAbortException &e) {
-                    // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
-                    std::string str = "abort\n";
-                    memcpy(data_send, str.c_str(), str.length());
-                    data_send[str.length()] = '\0';
-                    offset = str.length();
-
-                    // 回滚事务
-                    txn_manager->abort(context->txn_, log_manager.get());
-                    std::cout << e.GetInfo() << std::endl;
-
-                    std::fstream outfile;
-                    outfile.open("output.txt", std::ios::out | std::ios::app);
-                    outfile << str;
-                    outfile.close();
-                } catch (RMDBError &e) {
-                    // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
-                    std::cerr << e.what() << std::endl;
-
-                    memcpy(data_send, e.what(), e.get_msg_len());
-                    data_send[e.get_msg_len()] = '\n';
-                    data_send[e.get_msg_len() + 1] = '\0';
-                    offset = e.get_msg_len() + 1;
-
-                    // 将报错信息写入output.txt
-                    std::fstream outfile;
-                    outfile.open("output.txt",std::ios::out | std::ios::app);
-                    outfile << "failure\n";
-                    outfile.close();
                 }
             }
+        } catch (TransactionAbortException &e) {
+            // 事务需要回滚，需要把abort信息返回给客户端并写入output.txt文件中
+            std::string str = "abort\n";
+            memcpy(data_send, str.c_str(), str.length());
+            data_send[str.length()] = '\0';
+            offset = str.length();
+
+            // 回滚事务
+            txn_manager->abort(context->txn_, log_manager.get());
+            std::cout << e.GetInfo() << std::endl;
+
+            std::fstream outfile;
+            outfile.open("output.txt", std::ios::out | std::ios::app);
+            outfile << str;
+            outfile.close();
+        } catch (RMDBError &e) {
+            // 遇到异常，需要打印failure到output.txt文件中，并发异常信息返回给客户端
+            std::cerr << e.what() << std::endl;
+
+            memcpy(data_send, e.what(), e.get_msg_len());
+            data_send[e.get_msg_len()] = '\n';
+            data_send[e.get_msg_len() + 1] = '\0';
+            offset = e.get_msg_len() + 1;
+
+            // 将报错信息写入output.txt
+            std::fstream outfile;
+            outfile.open("output.txt",std::ios::out | std::ios::app);
+            outfile << "failure\n";
+            outfile.close();
         }
+
+
         if(finish_analyze == false) {
             yy_delete_buffer(buf);
             pthread_mutex_unlock(buffer_mutex);

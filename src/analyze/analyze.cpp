@@ -163,13 +163,41 @@ void Analyze::get_clause(const std::vector<std::shared_ptr<ast::BinaryExpr>> &sv
     }
 }
 
+// void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds) {
+//     // auto all_cols = get_all_cols(tab_names);
+//     std::vector<ColMeta> all_cols;
+//     get_all_cols(tab_names, all_cols);
+//     // Get raw values in where clause
+//     for (auto &cond : conds) {
+//         // Infer table name from column name
+//         cond.lhs_col = check_column(all_cols, cond.lhs_col);
+//         if (!cond.is_rhs_val) {
+//             cond.rhs_col = check_column(all_cols, cond.rhs_col);
+//         }
+//         TabMeta &lhs_tab = sm_manager_->db_.get_table(cond.lhs_col.tab_name);
+//         auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
+//         ColType lhs_type = lhs_col->type;
+//         ColType rhs_type;
+//         if (cond.is_rhs_val) {
+//             cond.rhs_val.init_raw(lhs_col->len);
+//             rhs_type = cond.rhs_val.type;
+//         } else {
+//             TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
+//             auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
+//             rhs_type = rhs_col->type;
+//         }
+//         if (lhs_type != rhs_type) {
+//             throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+//         }
+//     }
+// }
+
+
 void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vector<Condition> &conds) {
-    // auto all_cols = get_all_cols(tab_names);
     std::vector<ColMeta> all_cols;
     get_all_cols(tab_names, all_cols);
-    // Get raw values in where clause
+
     for (auto &cond : conds) {
-        // Infer table name from column name
         cond.lhs_col = check_column(all_cols, cond.lhs_col);
         if (!cond.is_rhs_val) {
             cond.rhs_col = check_column(all_cols, cond.rhs_col);
@@ -178,16 +206,30 @@ void Analyze::check_clause(const std::vector<std::string> &tab_names, std::vecto
         auto lhs_col = lhs_tab.get_col(cond.lhs_col.col_name);
         ColType lhs_type = lhs_col->type;
         ColType rhs_type;
+
         if (cond.is_rhs_val) {
-            cond.rhs_val.init_raw(lhs_col->len);
             rhs_type = cond.rhs_val.type;
+
+            // 在调用init_raw之前，先做类型检查与必要的转换
+            if (lhs_type != rhs_type) {
+                if (lhs_type == TYPE_BIGINT && rhs_type == TYPE_INT) {
+                    cond.rhs_val.set_bigint(static_cast<int64_t>(cond.rhs_val.int_val));
+                    rhs_type = TYPE_BIGINT;
+                } else {
+                    throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+                }
+            }
+
+            // 类型确认（或转换）完成后，再按目标列长度初始化raw
+            cond.rhs_val.init_raw(lhs_col->len);
         } else {
             TabMeta &rhs_tab = sm_manager_->db_.get_table(cond.rhs_col.tab_name);
             auto rhs_col = rhs_tab.get_col(cond.rhs_col.col_name);
             rhs_type = rhs_col->type;
-        }
-        if (lhs_type != rhs_type) {
-            throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+
+            if (lhs_type != rhs_type) {
+                throw IncompatibleTypeError(coltype2str(lhs_type), coltype2str(rhs_type));
+            }
         }
     }
 }
@@ -201,7 +243,9 @@ Value Analyze::convert_sv_value(const std::shared_ptr<ast::Value> &sv_val) {
         val.set_float(float_lit->val);
     } else if (auto str_lit = std::dynamic_pointer_cast<ast::StringLit>(sv_val)) {
         val.set_str(str_lit->val);
-    } else {
+    } else if (auto bigint_lit = std::dynamic_pointer_cast<ast::BigintLit>(sv_val)){
+        val.set_bigint(bigint_lit->val);
+    }else {
         throw InternalError("Unexpected sv value type");
     }
     return val;

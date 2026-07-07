@@ -33,6 +33,7 @@ struct Value {
     union {
         int int_val;      // int value
         float float_val;  // float value
+        int64_t bigint_val; // bigint value
     };
     std::string str_val;  // string value
 
@@ -41,6 +42,11 @@ struct Value {
     void set_int(int int_val_) {
         type = TYPE_INT;
         int_val = int_val_;
+    }
+
+    void set_bigint(int64_t bigint_val_){
+        type = TYPE_BIGINT;
+        bigint_val = bigint_val_;
     }
 
     void set_float(float float_val_) {
@@ -68,6 +74,9 @@ struct Value {
             }
             memset(raw->data, 0, len);
             memcpy(raw->data, str_val.c_str(), str_val.size());
+        }  else if (type == TYPE_BIGINT) {
+            assert(len == sizeof(int64_t));
+            *(int64_t *)(raw->data) = bigint_val;
         }
     }
 };

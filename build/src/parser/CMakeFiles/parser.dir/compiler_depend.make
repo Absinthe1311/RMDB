@@ -402,6 +402,18 @@ src/parser/CMakeFiles/parser.dir/lex.yy.cpp.o: ../src/parser/lex.yy.cpp \
   /usr/include/c++/11/bits/ostream.tcc \
   /usr/include/c++/11/istream \
   /usr/include/c++/11/bits/istream.tcc \
+  /usr/include/c++/11/climits \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/limits.h \
+  /usr/lib/gcc/x86_64-linux-gnu/11/include/syslimits.h \
+  /usr/include/limits.h \
+  /usr/include/x86_64-linux-gnu/bits/posix1_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/local_lim.h \
+  /usr/include/linux/limits.h \
+  /usr/include/x86_64-linux-gnu/bits/posix2_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/xopen_lim.h \
+  /usr/include/x86_64-linux-gnu/bits/uio_lim.h \
+  ../src/errors.h \
+  /usr/include/c++/11/cstring \
   /usr/include/unistd.h \
   /usr/include/x86_64-linux-gnu/bits/posix_opt.h \
   /usr/include/x86_64-linux-gnu/bits/environments.h \
@@ -632,6 +644,16 @@ src/parser/CMakeFiles/parser.dir/yacc.tab.cpp.o: ../src/parser/yacc.tab.cpp \
 
 /usr/include/x86_64-linux-gnu/bits/posix_opt.h:
 
+/usr/include/c++/11/cstring:
+
+/usr/include/x86_64-linux-gnu/bits/uio_lim.h:
+
+/usr/include/x86_64-linux-gnu/bits/posix1_lim.h:
+
+/usr/lib/gcc/x86_64-linux-gnu/11/include/limits.h:
+
+/usr/include/limits.h:
+
 /usr/include/c++/11/bits/istream.tcc:
 
 /usr/include/c++/11/istream:
@@ -680,13 +702,19 @@ src/parser/CMakeFiles/parser.dir/yacc.tab.cpp.o: ../src/parser/yacc.tab.cpp \
 
 /usr/include/c++/11/typeinfo:
 
+/usr/include/c++/11/climits:
+
 /usr/include/c++/11/array:
+
+/usr/lib/gcc/x86_64-linux-gnu/11/include/syslimits.h:
 
 /usr/include/c++/11/bits/stl_relops.h:
 
 /usr/include/c++/11/ostream:
 
 /usr/include/c++/11/bits/unique_ptr.h:
+
+../src/errors.h:
 
 /usr/include/c++/11/bits/uses_allocator.h:
 
@@ -762,6 +790,8 @@ src/parser/CMakeFiles/parser.dir/yacc.tab.cpp.o: ../src/parser/yacc.tab.cpp \
 
 /usr/include/c++/11/bits/exception.h:
 
+/usr/include/x86_64-linux-gnu/bits/local_lim.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/cookie_io_functions_t.h:
 
 /usr/include/x86_64-linux-gnu/bits/wchar.h:
@@ -775,6 +805,8 @@ src/parser/CMakeFiles/parser.dir/yacc.tab.cpp.o: ../src/parser/yacc.tab.cpp \
 /usr/include/x86_64-linux-gnu/gnu/stubs-64.h:
 
 /usr/include/c++/11/initializer_list:
+
+/usr/include/x86_64-linux-gnu/bits/xopen_lim.h:
 
 /usr/include/x86_64-linux-gnu/c++/11/bits/c++locale.h:
 
@@ -923,6 +955,10 @@ src/parser/CMakeFiles/parser.dir/yacc.tab.cpp.o: ../src/parser/yacc.tab.cpp \
 ../src/parser/yacc.tab.h:
 
 /usr/include/c++/11/bits/concept_check.h:
+
+/usr/include/x86_64-linux-gnu/bits/posix2_lim.h:
+
+/usr/include/linux/limits.h:
 
 /usr/include/stdint.h:
 

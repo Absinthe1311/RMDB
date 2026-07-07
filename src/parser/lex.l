@@ -15,6 +15,10 @@
 #include "yacc.tab.h"
 #include <iostream>
 
+#include <cerrno>     // 新增，提供 errno 和 ERANGE
+#include <climits>    // 新增，提供 INT32_MAX/INT32_MIN（如果原来没有的话）
+#include "errors.h"   // 新增，提供 ValueOutOfRangeError
+
 // automatically update location
 #define YY_USER_ACTION \
     yylloc->first_line = yylloc->last_line; \
@@ -77,6 +81,7 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 "INT" { return INT; }
 "CHAR" { return CHAR; }
 "FLOAT" { return FLOAT; }
+"BIGINT" { return BIGINT; }
 "INDEX" { return INDEX; }
 "AND" { return AND; }
 "JOIN" {return JOIN;}
@@ -97,8 +102,21 @@ single_op ";"|"("|")"|","|"*"|"="|">"|"<"|"."
 }
     /* literals */
 {value_int} {
-    yylval->sv_int = atoi(yytext);
-    return VALUE_INT;
+    errno = 0;  // 调用前先清零，确保这次检查的errno确实是本次strtoll调用产生的
+    long long v = strtoll(yytext, nullptr, 10);
+
+    // 检查是否超出int64_t（即bigint）能表示的范围
+    if (errno == ERANGE) {
+        throw ValueOutOfRangeError();
+    }
+
+    if (v > INT32_MAX || v < INT32_MIN) {
+        yylval->sv_bigint = v;
+        return VALUE_BIGINT;
+    } else {
+        yylval->sv_int = (int)v;
+        return VALUE_INT;
+    }
 }
 {value_float} {
     yylval->sv_float = atof(yytext);

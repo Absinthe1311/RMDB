@@ -68,6 +68,10 @@ protected:
             }
             case TYPE_STRING:
                 return memcmp(a, b, len);
+            case TYPE_BIGINT:{
+                int64_t ia = *(int64_t *) a, ib = *(int64_t *) b;
+                return (ia > ib) - (ia < ib);
+            }
             default:
                 throw InternalError("Unexpected data type");
         }
