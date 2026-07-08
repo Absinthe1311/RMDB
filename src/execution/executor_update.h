@@ -40,6 +40,26 @@ class UpdateExecutor : public AbstractExecutor {
     }
 
     std::unique_ptr<RmRecord> Next() override {
+        // 加表级意向排他锁（IX锁），防止幻读
+        if(context_->txn_ != nullptr) {
+            context_->lock_mgr_->lock_IX_on_table(
+                context_->txn_, 
+                fh_->GetFd()
+            );
+        }
+        
+        // 先为所有要更新的记录加锁
+        for (auto &rid : rids_) {
+            // 加行级排他锁
+            if(context_->txn_ != nullptr) {
+                context_->lock_mgr_->lock_exclusive_on_record(
+                    context_->txn_, 
+                    rid, 
+                    fh_->GetFd()
+                );
+            }
+        }
+        
         // 简化方案：先尝试插入新索引检测冲突，如果成功再删除旧索引并更新记录
         std::vector<std::tuple<std::string, std::vector<char>, Rid>> old_keys_to_delete;
         std::vector<std::tuple<std::string, std::vector<char>, Rid>> new_keys_to_insert;

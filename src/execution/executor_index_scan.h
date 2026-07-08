@@ -50,6 +50,35 @@ class IndexScanExecutor : public AbstractExecutor {
     const std::vector<ColMeta> &cols() const override { return cols_; }
 
     void beginTuple() override {
+        // 判断是否为范围查询
+        bool has_range_condition = false;
+        for(auto& cond : fed_conds_) {
+            if(cond.is_rhs_val) {
+                // 检查操作符是否为范围查询（非等值查询）
+                if(cond.op != OP_EQ && cond.op != OP_NE) {
+                    has_range_condition = true;
+                    break;
+                }
+            }
+        }
+        
+        // 加表级锁防止幻读
+        if(context_ != nullptr && context_->txn_ != nullptr) {
+            if(has_range_condition) {
+                // 范围查询：加表级S锁，防止其他事务插入
+                context_->lock_mgr_->lock_shared_on_table(
+                    context_->txn_, 
+                    fh_->GetFd()
+                );
+            } else {
+                // 非范围查询：加表级IS锁，允许并发
+                context_->lock_mgr_->lock_IS_on_table(
+                    context_->txn_, 
+                    fh_->GetFd()
+                );
+            }
+        }
+        
         // 构建扫描范围（与之前相同，但略去调试输出）
         std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index_meta_.cols);
         auto ih = sm_manager_->ihs_.at(index_name).get();
@@ -158,6 +187,16 @@ class IndexScanExecutor : public AbstractExecutor {
 
     std::unique_ptr<RmRecord> Next() override {
         if (!has_current_) return nullptr;
+        
+        // 加行级共享锁
+        if(context_ != nullptr && context_->txn_ != nullptr) {
+            context_->lock_mgr_->lock_shared_on_record(
+                context_->txn_, 
+                rid_, 
+                fh_->GetFd()
+            );
+        }
+        
         return fh_->get_record(rid_, context_);
     }
 

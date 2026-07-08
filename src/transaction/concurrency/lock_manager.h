@@ -64,4 +64,22 @@ public:
 private:
     std::mutex latch_;      // 用于锁表的并发
     std::unordered_map<LockDataId, LockRequestQueue> lock_table_;   // 全局锁表
+
+    // 锁兼容性矩阵
+    static const bool lock_compatibility_matrix_[5][5];
+    
+    // 检查锁兼容性
+    bool is_lock_compatible(LockMode lock_mode, GroupLockMode group_lock_mode);
+    
+    // 更新锁队列的组锁模式
+    void update_group_lock_mode(LockRequestQueue& queue);
+    
+    // 检查事务是否已持有该数据项的锁
+    bool is_lock_hold(Transaction* txn, const LockDataId& lock_data_id, LockMode& current_mode);
+    
+    // 检查队列中是否有其他事务持有不兼容的锁
+    bool has_conflict_lock(LockRequestQueue& queue, txn_id_t txn_id, LockMode lock_mode);
+    
+    // 将LockMode转换为GroupLockMode
+    GroupLockMode lock_mode_to_group_mode(LockMode lock_mode);
 };

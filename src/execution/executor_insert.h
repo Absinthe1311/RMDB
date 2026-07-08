@@ -39,6 +39,14 @@ class InsertExecutor : public AbstractExecutor {
     };
 
     std::unique_ptr<RmRecord> Next() override {
+        // 加表级意向排他锁（IX锁），防止幻读
+        if(context_->txn_ != nullptr) {
+            context_->lock_mgr_->lock_IX_on_table(
+                context_->txn_, 
+                fh_->GetFd()
+            );
+        }
+        
         // Make record buffer
         RmRecord rec(fh_->get_file_hdr().record_size);
         for (size_t i = 0; i < values_.size(); i++) {
@@ -81,6 +89,15 @@ class InsertExecutor : public AbstractExecutor {
         // Insert into record file
         rid_ = fh_->insert_record(rec.data, context_);
         std::cerr << "insert record rid: page=" << rid_.page_no << ", slot=" << rid_.slot_no << std::endl;
+        
+        // 加行级排他锁
+        if(context_->txn_ != nullptr) {
+            context_->lock_mgr_->lock_exclusive_on_record(
+                context_->txn_, 
+                rid_, 
+                fh_->GetFd()
+            );
+        }
         
         // 记录写操作到事务的write_set
         if(context_->txn_ != nullptr) {
