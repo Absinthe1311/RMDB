@@ -11,6 +11,7 @@ See the Mulan PSL v2 for more details. */
 #include "transaction_manager.h"
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
+#include "index/ix.h"
 
 std::unordered_map<txn_id_t, Transaction *> TransactionManager::txn_map = {};
 
@@ -55,6 +56,22 @@ void TransactionManager::commit(Transaction* txn, LogManager* log_manager) {
     // 3. 释放事务相关资源，eg.锁集
     // 4. 把事务日志刷入磁盘中
     // 5. 更新事务状态
+    
+    // 记录COMMIT日志
+    if (log_manager != nullptr) {
+        CommitLogRecord commit_log(txn->get_transaction_id());
+        commit_log.prev_lsn_ = txn->get_prev_lsn();
+        lsn_t lsn = log_manager->add_log_to_buffer(&commit_log);
+        txn->set_prev_lsn(lsn);
+    }
+    
+    // 1. 如果存在未提交的写操作，此处不需要额外提交（写操作在执行时已经直接写入了记录文件，
+    //    commit阶段主要处理的是锁的释放和状态更新，写操作的"提交"体现在不回滚）
+
+    // 2. 释放所有锁
+    // 3. 释放事务相关资源，eg.锁集
+    // 4. 把事务日志刷入磁盘中
+    // 5. 更新事务状态
     // 1. 如果存在未提交的写操作，此处不需要额外提交（写操作在执行时已经直接写入了记录文件，
     //    commit阶段主要处理的是锁的释放和状态更新，写操作的“提交”体现在不回滚）
 
@@ -89,26 +106,106 @@ void TransactionManager::abort(Transaction * txn, LogManager *log_manager) {
     // 3. 清空事务相关资源，eg.锁集
     // 4. 把事务日志刷入磁盘中
     // 5. 更新事务状态
+    
+    // 记录ABORT日志
+    if (log_manager != nullptr) {
+        AbortLogRecord abort_log(txn->get_transaction_id());
+        abort_log.prev_lsn_ = txn->get_prev_lsn();
+        lsn_t lsn = log_manager->add_log_to_buffer(&abort_log);
+        txn->set_prev_lsn(lsn);
+    }
+    
     // 1. 回滚所有写操作：按照写集里记录的操作，逆序做相反的操作
     auto write_set = txn->get_write_set();
     while (!write_set->empty()) {
         auto write_record = write_set->back();
         auto tab_name = write_record->GetTableName();
         auto rm_file_handle = sm_manager_->fhs_.at(tab_name).get();
+        auto& tab = sm_manager_->db_.get_table(tab_name);
 
         switch (write_record->GetWriteType()) {
             case WType::INSERT_TUPLE:
+            {
                 // 插入的逆操作是删除
+                // 先获取记录值用于删除索引
+                auto rec = rm_file_handle->get_record(write_record->GetRid(), nullptr);
+                
+                // 删除索引
+                for(auto& index : tab.indexes) {
+                    std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols);
+                    auto ih = sm_manager_->ihs_.at(index_name).get();
+                    
+                    char* key = new char[index.col_tot_len];
+                    int offset = 0;
+                    for(auto& col : index.cols) {
+                        memcpy(key + offset, rec->data + col.offset, col.len);
+                        offset += col.len;
+                    }
+                    ih->delete_entry(key, nullptr);
+                    delete[] key;
+                }
+                
+                // 删除记录
                 rm_file_handle->delete_record(write_record->GetRid(), nullptr);
                 break;
+            }
             case WType::DELETE_TUPLE:
+            {
                 // 删除的逆操作是重新插入原来的记录
                 rm_file_handle->insert_record(write_record->GetRid(), write_record->GetRecord().data);
+                
+                // 重新插入索引
+                for(auto& index : tab.indexes) {
+                    std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols);
+                    auto ih = sm_manager_->ihs_.at(index_name).get();
+                    
+                    char* key = new char[index.col_tot_len];
+                    int offset = 0;
+                    for(auto& col : index.cols) {
+                        memcpy(key + offset, write_record->GetRecord().data + col.offset, col.len);
+                        offset += col.len;
+                    }
+                    ih->insert_entry(key, write_record->GetRid(), nullptr);
+                    delete[] key;
+                }
                 break;
+            }
             case WType::UPDATE_TUPLE:
+            {
                 // 更新的逆操作是把记录改回旧值
+                // 先获取当前记录值
+                auto rec = rm_file_handle->get_record(write_record->GetRid(), nullptr);
+                
+                // 更新记录
                 rm_file_handle->update_record(write_record->GetRid(), write_record->GetRecord().data, nullptr);
+                
+                // 更新索引：删除新key，插入旧key
+                for(auto& index : tab.indexes) {
+                    std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name, index.cols);
+                    auto ih = sm_manager_->ihs_.at(index_name).get();
+                    
+                    // 删除新key
+                    char* new_key = new char[index.col_tot_len];
+                    int offset = 0;
+                    for(auto& col : index.cols) {
+                        memcpy(new_key + offset, rec->data + col.offset, col.len);
+                        offset += col.len;
+                    }
+                    ih->delete_entry(new_key, nullptr);
+                    delete[] new_key;
+                    
+                    // 插入旧key
+                    char* old_key = new char[index.col_tot_len];
+                    offset = 0;
+                    for(auto& col : index.cols) {
+                        memcpy(old_key + offset, write_record->GetRecord().data + col.offset, col.len);
+                        offset += col.len;
+                    }
+                    ih->insert_entry(old_key, write_record->GetRid(), nullptr);
+                    delete[] old_key;
+                }
                 break;
+            }
         }
         write_set->pop_back();
     }

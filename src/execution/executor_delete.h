@@ -38,8 +38,21 @@ class DeleteExecutor : public AbstractExecutor {
 
     std::unique_ptr<RmRecord> Next() override {
         for (auto &rid : rids_) {
-            // 先从索引中删除记录
+            // 先获取被删除的记录值（用于回滚）
             auto rec = fh_->get_record(rid, context_);
+            
+            // 记录写操作到事务的write_set
+            if(context_->txn_ != nullptr) {
+                WriteRecord* write_record = new WriteRecord(
+                    WType::DELETE_TUPLE,
+                    tab_name_,
+                    rid,
+                    *rec
+                );
+                context_->txn_->append_write_record(write_record);
+            }
+            
+            // 先从索引中删除记录
             for (auto &index : tab_.indexes) {
                 std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols);
                 auto ih = sm_manager_->ihs_.at(index_name).get();

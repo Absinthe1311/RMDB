@@ -82,6 +82,16 @@ class InsertExecutor : public AbstractExecutor {
         rid_ = fh_->insert_record(rec.data, context_);
         std::cerr << "insert record rid: page=" << rid_.page_no << ", slot=" << rid_.slot_no << std::endl;
         
+        // 记录写操作到事务的write_set
+        if(context_->txn_ != nullptr) {
+            WriteRecord* write_record = new WriteRecord(
+                WType::INSERT_TUPLE,
+                tab_name_,
+                rid_
+            );
+            context_->txn_->append_write_record(write_record);
+        }
+        
         // Insert into index
         for (auto &index : tab_.indexes) {
             std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols);

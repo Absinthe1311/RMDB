@@ -162,6 +162,30 @@ class UpdateExecutor : public AbstractExecutor {
             for (auto &rid : rids_) {
                 auto rec = fh_->get_record(rid, context_);
                 
+                // 记录写操作到事务的write_set（保存旧值）
+                if(context_->txn_ != nullptr) {
+                    // 找到对应的旧记录
+                    std::vector<char>* old_data = nullptr;
+                    for(auto &p : old_records) {
+                        if(p.first == rid) {
+                            old_data = &p.second;
+                            break;
+                        }
+                    }
+                    
+                    if(old_data != nullptr) {
+                        RmRecord old_rec(old_data->size());
+                        memcpy(old_rec.data, old_data->data(), old_data->size());
+                        WriteRecord* write_record = new WriteRecord(
+                            WType::UPDATE_TUPLE,
+                            tab_name_,
+                            rid,
+                            old_rec
+                        );
+                        context_->txn_->append_write_record(write_record);
+                    }
+                }
+                
                 for (auto &set_clause : set_clauses_) {
                     auto col = tab_.get_col(set_clause.lhs.col_name);
                     Value &val = set_clause.rhs;
