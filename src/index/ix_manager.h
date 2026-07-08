@@ -77,6 +77,16 @@ class IxManager {
         // 即 n <= btree_order，那么btree_order就是每个结点最多可插入的键值对数量（实际还多留了一个空位，但其不可插入）
         int btree_order = static_cast<int>((PAGE_SIZE - sizeof(IxPageHdr)) / (col_tot_len + sizeof(Rid)) - 1);
         assert(btree_order > 2);
+        
+        std::cerr << "\n===== B+TREE CAPACITY DEBUG =====" << std::endl;
+        std::cerr << "sizeof(IxPageHdr) = " << sizeof(IxPageHdr) << std::endl;
+        std::cerr << "sizeof(Rid) = " << sizeof(Rid) << std::endl;
+        std::cerr << "PAGE_SIZE = " << PAGE_SIZE << std::endl;
+        std::cerr << "col_tot_len = " << col_tot_len << std::endl;
+        std::cerr << "btree_order = " << btree_order << std::endl;
+        std::cerr << "get_max_size() = btree_order + 1 = " << (btree_order + 1) << std::endl;
+        std::cerr << "keys_size = (btree_order + 1) * col_tot_len = " << ((btree_order + 1) * col_tot_len) << std::endl;
+        std::cerr << "==================================" << std::endl;
 
         // Create file header and write to file
         IxFileHdr* fhdr = new IxFileHdr(IX_NO_PAGE, IX_INIT_NUM_PAGES, IX_INIT_ROOT_PAGE,
@@ -160,8 +170,14 @@ class IxManager {
         char* data = new char[ih->file_hdr_->tot_len_];
         ih->file_hdr_->serialize(data);
         disk_manager_->write_page(ih->fd_, IX_FILE_HDR_PAGE, data, ih->file_hdr_->tot_len_);
-        // 缓冲区的所有页刷到磁盘，注意这句话必须写在close_file前面
+        
+        // 先刷出所有脏页到磁盘
         buffer_pool_manager_->flush_all_pages(ih->fd_);
+        
+        // 关键修复：从缓冲池中移除该文件的所有页面，避免污染后续索引
+        buffer_pool_manager_->remove_all_pages(ih->fd_);
+        
         disk_manager_->close_file(ih->fd_);
+        delete[] data;
     }
 };

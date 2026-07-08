@@ -1,0 +1,69 @@
+
+  _____  __  __ _____  ____  
+ |  __ \|  \/  |  __ \|  _ \ 
+ | |__) | \  / | |  | | |_) |
+ |  _  /| |\/| | |  | |  _ < 
+ | | \ \| |  | | |__| | |_) |
+ |_|  \_\_|  |_|_____/|____/ 
+
+Welcome to RMDB!
+Type 'help;' for help.
+
+Waiting for new connection...
+Waiting for new connection...
+establish client connection, sockfd: 4
+Waiting for request...
+i_recvBytes: 49 
+ Read from client 4: create table warehouse (w_id int, name char(8));
+Waiting for request...
+i_recvBytes: 39 
+ Read from client 4: insert into warehouse values (1, 'a');
+insert record rid: page=1, slot=0
+Waiting for request...
+i_recvBytes: 39 
+ Read from client 4: insert into warehouse values (2, 'a');
+insert record rid: page=1, slot=1
+Waiting for request...
+i_recvBytes: 19 
+ Read from client 4: -- 插入到200条
+Waiting for request...
+i_recvBytes: 41 
+ Read from client 4: insert into warehouse values (200, 'a');
+insert record rid: page=1, slot=2
+Waiting for request...
+i_recvBytes: 30 
+ Read from client 4: create index warehouse(w_id);
+
+===== B+TREE CAPACITY DEBUG =====
+sizeof(IxPageHdr) = 24
+sizeof(Rid) = 8
+PAGE_SIZE = 4096
+col_tot_len = 4
+btree_order = 338
+get_max_size() = btree_order + 1 = 339
+keys_size = (btree_order + 1) * col_tot_len = 1356
+==================================
+1
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+DEBUG: Successfully inserted 3 index entries
+Waiting for request...
+i_recvBytes: 42 
+ Read from client 4: select * from warehouse where w_id = 169;
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+Waiting for request...
+i_recvBytes: 42 
+ Read from client 4: select * from warehouse where w_id = 170;
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+IxIndexHandle opened: root=2 first_leaf=2 last_leaf=2 num_pages=3
+Waiting for request...
+i_recvBytes: 28 
+ Read from client 4: drop index warehouse(w_id);
+Waiting for request...
+i_recvBytes: 22 
+ Read from client 4: drop table warehouse;
+Waiting for request...
+Maybe the client has closed
+Terminating current client_connection...

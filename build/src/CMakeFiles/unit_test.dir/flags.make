@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/home/absinthe/rmdb/src -isystem /home/absinthe/rmdb/deps/googletest/googletest/include -isystem /home/absinthe/rmdb/deps/googletest/googletest
 
-CXX_FLAGS = -Wall -O0 -g -ggdb3
+CXX_FLAGS = -Wall -O0 -g -ggdb3 -g -O0 -g
 

@@ -35,6 +35,16 @@ class Query{
     //insert 的values值
     std::vector<Value> values;
 
+
+    std::string index_tab_name;                    // show index 的表名
+    std::string create_index_tab_name;             // create index 的表名
+    std::vector<std::string> create_index_cols;    // create index 的列名
+    std::string drop_index_tab_name;               // drop index 的表名
+    std::vector<std::string> drop_index_cols;      // drop index 的列名
+    bool is_show_index = false;
+    bool is_create_index = false;
+    bool is_drop_index = false;
+    
     Query(){}
 
 };

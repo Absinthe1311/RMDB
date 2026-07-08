@@ -84,30 +84,86 @@ struct TabMeta {
         return pos != cols.end();
     }
 
-    /* 判断当前表上是否建有指定索引，索引包含的字段为col_names */
-    bool is_index(const std::vector<std::string>& col_names) const {
-        for(auto& index: indexes) {
-            if(index.col_num == col_names.size()) {
-                size_t i = 0;
-                for(; i < index.col_num; ++i) {
-                    if(index.cols[i].name.compare(col_names[i]) != 0)
-                        break;
-                }
-                if(i == index.col_num) return true;
-            }
-        }
+    // /* 判断当前表上是否建有指定索引，索引包含的字段为col_names */
+    // bool is_index(const std::vector<std::string>& col_names) const {
+    //     for(auto& index: indexes) {
+    //         if(index.col_num == col_names.size()) {
+    //             size_t i = 0;
+    //             for(; i < index.col_num; ++i) {
+    //                 if(index.cols[i].name.compare(col_names[i]) != 0)
+    //                     break;
+    //             }
+    //             if(i == index.col_num) return true;
+    //         }
+    //     }
 
+    //     return false;
+    // }
+
+    // /* 根据字段名称集合获取索引元数据 */
+    // std::vector<IndexMeta>::iterator get_index_meta(const std::vector<std::string>& col_names) {
+    //     for(auto index = indexes.begin(); index != indexes.end(); ++index) {
+    //         if((*index).col_num != col_names.size()) continue;
+    //         auto& index_cols = (*index).cols;
+    //         size_t i = 0;
+    //         for(; i < col_names.size(); ++i) {
+    //             if(index_cols[i].name.compare(col_names[i]) != 0) 
+    //                 break;
+    //         }
+    //         if(i == col_names.size()) return index;
+    //     }
+    //     throw IndexNotFoundError(name, col_names);
+    // }
+
+    /* 判断当前表上是否建有指定索引（精确匹配，用于DDL） */
+    bool is_index_exact(const std::vector<std::string>& col_names) const {
+        for(auto& index: indexes) {
+            if(index.col_num != static_cast<int>(col_names.size())) continue;
+            size_t i = 0;
+            for(; i < col_names.size(); ++i) {
+                if(index.cols[i].name.compare(col_names[i]) != 0)
+                    break;
+            }
+            if(i == col_names.size()) return true;
+        }
         return false;
     }
 
-    /* 根据字段名称集合获取索引元数据 */
-    std::vector<IndexMeta>::iterator get_index_meta(const std::vector<std::string>& col_names) {
-        for(auto index = indexes.begin(); index != indexes.end(); ++index) {
-            if((*index).col_num != col_names.size()) continue;
-            auto& index_cols = (*index).cols;
+    /* 判断当前表上是否建有以 col_names 为前缀的索引（最左匹配，用于查询优化） */
+    bool is_index(const std::vector<std::string>& col_names) const {
+        for(auto& index: indexes) {
+            if(col_names.size() > static_cast<size_t>(index.col_num)) continue;
             size_t i = 0;
             for(; i < col_names.size(); ++i) {
-                if(index_cols[i].name.compare(col_names[i]) != 0) 
+                if(index.cols[i].name.compare(col_names[i]) != 0)
+                    break;
+            }
+            if(i == col_names.size()) return true;
+        }
+        return false;
+    }
+
+    /* 根据列名获取索引元数据（精确匹配，用于DDL） */
+    std::vector<IndexMeta>::iterator get_index_meta_exact(const std::vector<std::string>& col_names) {
+        for(auto index = indexes.begin(); index != indexes.end(); ++index) {
+            if(index->col_num != static_cast<int>(col_names.size())) continue;
+            size_t i = 0;
+            for(; i < col_names.size(); ++i) {
+                if(index->cols[i].name.compare(col_names[i]) != 0)
+                    break;
+            }
+            if(i == col_names.size()) return index;
+        }
+        throw IndexNotFoundError(name, col_names);
+    }
+
+    /* 根据前缀列名获取完整的索引元数据（最左匹配，用于查询优化） */
+    std::vector<IndexMeta>::iterator get_index_meta(const std::vector<std::string>& col_names) {
+        for(auto index = indexes.begin(); index != indexes.end(); ++index) {
+            if(col_names.size() > static_cast<size_t>(index->col_num)) continue;
+            size_t i = 0;
+            for(; i < col_names.size(); ++i) {
+                if(index->cols[i].name.compare(col_names[i]) != 0)
                     break;
             }
             if(i == col_names.size()) return index;

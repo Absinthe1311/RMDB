@@ -251,3 +251,36 @@ void BufferPoolManager::flush_all_pages(int fd) {
         }
     }
 }
+
+/**
+ * @description: 从buffer_pool中移除指定文件的所有页面（不写回磁盘）
+ * @param {int} fd 文件句柄
+ */
+void BufferPoolManager::remove_all_pages(int fd) {
+    std::scoped_lock lock{latch_};
+    
+    std::vector<PageId> pages_to_remove;
+    for (auto &entry : page_table_) {
+        if (entry.first.fd == fd) {
+            pages_to_remove.push_back(entry.first);
+        }
+    }
+    
+    for (auto &page_id : pages_to_remove) {
+        auto it = page_table_.find(page_id);
+        if (it != page_table_.end()) {
+            frame_id_t frame_id = it->second;
+            Page *page = &pages_[frame_id];
+            
+            // 只有在 pin_count == 0 时才能移除
+            if (page->pin_count_ == 0) {
+                page_table_.erase(page_id);
+                page->reset_memory();
+                page->id_ = {.fd=-1, .page_no=INVALID_PAGE_ID};
+                page->pin_count_ = 0;
+                page->is_dirty_ = false;
+                free_list_.push_back(frame_id);
+            }
+        }
+    }
+}

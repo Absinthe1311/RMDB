@@ -90,6 +90,8 @@ class Portal
                     for (scan->beginTuple(); !scan->is_end(); scan->nextTuple()) {
                         rids.push_back(scan->rid());
                     }
+                    
+                    std::cerr << "DEBUG Delete: found " << rids.size() << " records to delete" << std::endl;
 
                     std::unique_ptr<AbstractExecutor> root =
                         std::make_unique<DeleteExecutor>(sm_manager_, x->tab_name_, x->conds_, rids, context);

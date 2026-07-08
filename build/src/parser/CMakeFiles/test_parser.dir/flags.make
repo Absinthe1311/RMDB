@@ -6,5 +6,5 @@ CXX_DEFINES =
 
 CXX_INCLUDES = -I/home/absinthe/rmdb/src
 
-CXX_FLAGS = -Wall -O0 -g -ggdb3
+CXX_FLAGS = -Wall -O0 -g -ggdb3 -g -O0 -g
 

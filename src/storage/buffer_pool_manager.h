@@ -75,6 +75,9 @@ class BufferPoolManager {
     bool delete_page(PageId page_id);
 
     void flush_all_pages(int fd);
+    
+    // 删除缓冲池中指定文件的所有页面（用于关闭索引时清理缓冲池）
+    void remove_all_pages(int fd);
 
    private:
     bool find_victim_page(frame_id_t* frame_id);

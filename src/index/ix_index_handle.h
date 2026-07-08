@@ -65,6 +65,11 @@ class IxNodeHandle {
         page_hdr = reinterpret_cast<IxPageHdr *>(page->get_data());
         keys = page->get_data() + sizeof(IxPageHdr);
         rids = reinterpret_cast<Rid *>(keys + file_hdr->keys_size_);
+
+        std::cerr << "IxIndexHandle opened: root=" << file_hdr_->root_page_
+                << " first_leaf=" << file_hdr_->first_leaf_
+                << " last_leaf=" << file_hdr_->last_leaf_
+                << " num_pages=" << file_hdr_->num_pages_ << std::endl;
     }
 
     int get_size() { return page_hdr->num_key; }
@@ -147,12 +152,15 @@ class IxNodeHandle {
      */
     int find_child(IxNodeHandle *child) {
         int rid_idx;
-        for (rid_idx = 0; rid_idx < page_hdr->num_key; rid_idx++) {
+        // 对于内部节点，有 num_key + 1 个孩子（包括最右孩子）
+        // 所以要遍历 rid_idx <= num_key（即遍历所有孩子）
+        int child_count = is_leaf_page() ? page_hdr->num_key : (page_hdr->num_key + 1);
+        for (rid_idx = 0; rid_idx < child_count; rid_idx++) {
             if (get_rid(rid_idx)->page_no == child->get_page_no()) {
                 break;
             }
         }
-        assert(rid_idx < page_hdr->num_key);
+        assert(rid_idx < child_count);
         return rid_idx;
     }
 };
@@ -181,7 +189,9 @@ class IxIndexHandle {
     // for insert
     page_id_t insert_entry(const char *key, const Rid &value, Transaction *transaction);
 
-    IxNodeHandle *split(IxNodeHandle *node);
+    // split函数返回tuple: <new_node, split_key_buffer>
+    // split_key_buffer是动态分配的，调用者需要负责释放
+    std::tuple<IxNodeHandle *, char *> split(IxNodeHandle *node);
 
     void insert_into_parent(IxNodeHandle *old_node, const char *key, IxNodeHandle *new_node, Transaction *transaction);
 
@@ -204,6 +214,9 @@ class IxIndexHandle {
     Iid leaf_end() const;
 
     Iid leaf_begin() const;
+    
+    // 打印B+树结构（用于调试）
+    void print_btree_structure();
 
    private:
     // 辅助函数

@@ -110,6 +110,40 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         for (auto &sv_val : x->vals) {
             query->values.push_back(convert_sv_value(sv_val));
         }
+    }
+    else if (auto x = std::dynamic_pointer_cast<ast::ShowIndex>(parse)) {
+        // 检查表是否存在
+        if (!sm_manager_->db_.is_table(x->tab_name)) {
+            throw TableNotFoundError(x->tab_name);
+        }
+        query->is_show_index = true;
+        query->index_tab_name = x->tab_name;
+        
+    } else if (auto x = std::dynamic_pointer_cast<ast::CreateIndex>(parse)) {
+        // 检查表是否存在
+        if (!sm_manager_->db_.is_table(x->tab_name)) {
+            throw TableNotFoundError(x->tab_name);
+        }
+        // 检查列是否存在
+        TabMeta &tab = sm_manager_->db_.get_table(x->tab_name);
+        for (auto &col_name : x->col_names) {
+            if (!tab.is_col(col_name)) {
+                throw ColumnNotFoundError(col_name);
+            }
+        }
+        query->is_create_index = true;
+        query->create_index_tab_name = x->tab_name;
+        query->create_index_cols = x->col_names;
+
+    } else if (auto x = std::dynamic_pointer_cast<ast::DropIndex>(parse)) {
+        // 检查表是否存在
+        if (!sm_manager_->db_.is_table(x->tab_name)) {
+            throw TableNotFoundError(x->tab_name);
+        }
+        query->is_drop_index = true;
+        query->drop_index_tab_name = x->tab_name;
+        query->drop_index_cols = x->col_names;
+
     } else {
         // do nothing
     }

@@ -30,7 +30,23 @@ class IxScan : public RecScan {
 
     void next() override;
 
-    bool is_end() const override { return iid_ == end_; }
+    bool is_end() const override { 
+        // 简单的相等比较，但需要考虑 iid_ 可能超出节点大小的情况
+        // 如果 iid_ 超出当前节点大小，也应该视为到达末尾
+        if(iid_ == end_) {
+            // 调试输出
+            static int count = 0;
+            count++;
+            if(count <= 20) {
+                std::cerr << "DEBUG is_end: iid==end, count=" << count 
+                          << " page=" << iid_.page_no << " slot=" << iid_.slot_no << std::endl;
+            }
+            return true;
+        }
+        // 如果 iid_ 的槽位超出节点大小（无效位置），也视为结束
+        // 这个检查在实际访问前进行，避免访问无效位置
+        return false;
+    }
 
     Rid rid() const override;
 

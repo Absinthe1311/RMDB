@@ -23,14 +23,109 @@ See the Mulan PSL v2 for more details. */
 #include "record_printer.h"
 
 // 目前的索引匹配规则为：完全匹配索引字段，且全部为单点查询，不会自动调整where条件的顺序
-bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds, std::vector<std::string>& index_col_names) {
+// bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds, std::vector<std::string>& index_col_names) {
+//     index_col_names.clear();
+//     for(auto& cond: curr_conds) {
+//         if(cond.is_rhs_val && cond.op == OP_EQ && cond.lhs_col.tab_name.compare(tab_name) == 0)
+//             index_col_names.push_back(cond.lhs_col.col_name);
+//     }
+//     TabMeta& tab = sm_manager_->db_.get_table(tab_name);
+//     if(tab.is_index(index_col_names)) return true;
+//     return false;
+// }
+
+// bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds, 
+//                              std::vector<std::string>& index_col_names) {
+//     index_col_names.clear();
+//     TabMeta &tab = sm_manager_->db_.get_table(tab_name);
+    
+//     // 遍历表上的每个索引
+//     for (auto &index : tab.indexes) {
+//         std::vector<std::string> matched_cols;
+//         bool matched = true;
+        
+//         // 按索引列顺序检查最左匹配
+//         for (auto &index_col : index.cols) {
+//             bool found = false;
+//             for (auto &cond : curr_conds) {
+//                 if (cond.lhs_col.col_name == index_col.name && 
+//                     cond.lhs_col.tab_name == tab_name && 
+//                     cond.is_rhs_val) {
+//                     matched_cols.push_back(cond.lhs_col.col_name);
+//                     found = true;
+//                     break;
+//                 }
+//             }
+//             // 最左匹配：一旦某列找不到匹配，停止
+//             if (!found) {
+//                 if (matched_cols.empty()) {
+//                     matched = false;
+//                 }
+//                 break;
+//             }
+//         }
+        
+//         if (matched && !matched_cols.empty()) {
+//             index_col_names = matched_cols;
+//             return true;
+//         }
+//     }
+    
+//     return false;
+// }
+
+bool Planner::get_index_cols(std::string tab_name, std::vector<Condition> curr_conds, 
+                             std::vector<std::string>& index_col_names) {
     index_col_names.clear();
-    for(auto& cond: curr_conds) {
-        if(cond.is_rhs_val && cond.op == OP_EQ && cond.lhs_col.tab_name.compare(tab_name) == 0)
-            index_col_names.push_back(cond.lhs_col.col_name);
+    TabMeta &tab = sm_manager_->db_.get_table(tab_name);
+    
+    std::vector<std::string> best_match;
+    size_t best_index_cols = 0;
+    
+    for (auto &index : tab.indexes) {
+        std::vector<std::string> matched_cols;
+        bool has_range = false;
+        
+        for (size_t i = 0; i < index.cols.size(); ++i) {
+            auto &index_col = index.cols[i];
+            bool found = false;
+            
+            for (auto &cond : curr_conds) {
+                if (cond.lhs_col.col_name == index_col.name && 
+                    cond.lhs_col.tab_name == tab_name && 
+                    cond.is_rhs_val) {
+                    found = true;
+                    matched_cols.push_back(cond.lhs_col.col_name);
+                    if (cond.op != OP_EQ) {
+                        has_range = true;
+                    }
+                    break;
+                }
+            }
+            
+            if (!found) {
+                break;
+            }
+            
+            if (has_range) {
+                break;
+            }
+        }
+        
+        if (!matched_cols.empty()) {
+            if (matched_cols.size() > best_match.size() || 
+                (matched_cols.size() == best_match.size() && index.cols.size() > best_index_cols)) {
+                best_match = matched_cols;
+                best_index_cols = index.cols.size();
+            }
+        }
     }
-    TabMeta& tab = sm_manager_->db_.get_table(tab_name);
-    if(tab.is_index(index_col_names)) return true;
+    
+    if (!best_match.empty()) {
+        index_col_names = best_match;
+        return true;
+    }
+    
     return false;
 }
 
@@ -319,6 +414,9 @@ std::shared_ptr<Plan> Planner::do_planner(std::shared_ptr<Query> query, Context 
     } else if (auto x = std::dynamic_pointer_cast<ast::DropIndex>(query->parse)) {
         // drop index
         plannerRoot = std::make_shared<DDLPlan>(T_DropIndex, x->tab_name, x->col_names, std::vector<ColDef>());
+    } else if (auto x = std::dynamic_pointer_cast<ast::ShowIndex>(query->parse)){
+        // show index
+        plannerRoot = std::make_shared<DDLPlan>(T_ShowIndex, x->tab_name, std::vector<std::string>(), std::vector<ColDef>());
     } else if (auto x = std::dynamic_pointer_cast<ast::InsertStmt>(query->parse)) {
         // insert;
         plannerRoot = std::make_shared<DMLPlan>(T_Insert, std::shared_ptr<Plan>(),  x->tab_name,  

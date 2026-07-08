@@ -1,0 +1,35 @@
+Rucbase> -- 测试触发failure的w_id（修正语法）
+Rucbase> 
+Rucbase> create table test(w_id int, name char(8));
+Rucbase> 
+Rucbase> insert into test values(168, 'a');
+Rucbase> insert into test values(169, 'b');
+Rucbase> insert into test values(170, 'c');
+Rucbase> 
+Rucbase> create index test(w_id);
+Rucbase> 
+Rucbase> select * from test where w_id = 168;
++------------------+------------------+
+|             w_id |             name |
++------------------+------------------+
+|              168 |                a |
++------------------+------------------+
+Total record(s): 1
+Rucbase> select * from test where w_id = 169;
++------------------+------------------+
+|             w_id |             name |
++------------------+------------------+
+|              169 |                b |
++------------------+------------------+
+Total record(s): 1
+Rucbase> select * from test where w_id = 170;
++------------------+------------------+
+|             w_id |             name |
++------------------+------------------+
+|              170 |                c |
++------------------+------------------+
+Total record(s): 1
+Rucbase> 
+Rucbase> drop index test(w_id);
+Rucbase> drop table test;
+Rucbase> Bye.
