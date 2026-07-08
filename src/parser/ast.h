@@ -190,12 +190,19 @@ struct BinaryExpr : public TreeNode {
             lhs(std::move(lhs_)), op(op_), rhs(std::move(rhs_)) {}
 };
 
+struct OrderByCol : public TreeNode
+{
+    std::shared_ptr<Col> col;
+    OrderByDir orderby_dir;
+    OrderByCol(std::shared_ptr<Col> col_, OrderByDir orderby_dir_) :
+       col(std::move(col_)), orderby_dir(std::move(orderby_dir_)) {}
+};
+
 struct OrderBy : public TreeNode
 {
-    std::shared_ptr<Col> cols;
-    OrderByDir orderby_dir;
-    OrderBy( std::shared_ptr<Col> cols_, OrderByDir orderby_dir_) :
-       cols(std::move(cols_)), orderby_dir(std::move(orderby_dir_)) {}
+    std::vector<std::shared_ptr<OrderByCol>> order_by_cols;
+    OrderBy(std::vector<std::shared_ptr<OrderByCol>> cols_) :
+       order_by_cols(std::move(cols_)) {}
 };
 
 struct InsertStmt : public TreeNode {
@@ -245,6 +252,7 @@ struct SelectStmt : public TreeNode {
     
     bool has_sort;
     std::shared_ptr<OrderBy> order;
+    int limit;
     
     std::vector<std::shared_ptr<AggExpr>> agg_funcs;
 
@@ -253,9 +261,10 @@ struct SelectStmt : public TreeNode {
                std::vector<std::string> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
                std::shared_ptr<OrderBy> order_,
+               int limit_,
                std::vector<std::shared_ptr<AggExpr>> agg_funcs_ = {}) :
             cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
-            order(std::move(order_)), agg_funcs(std::move(agg_funcs_)) {
+            order(std::move(order_)), limit(limit_), agg_funcs(std::move(agg_funcs_)) {
                 has_sort = (bool)order;
             }
 };
@@ -293,6 +302,7 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    std::vector<std::shared_ptr<OrderByCol>> sv_orderbys;
     
     std::shared_ptr<AggExpr> sv_agg;
     std::vector<std::shared_ptr<AggExpr>> sv_aggs;

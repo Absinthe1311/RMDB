@@ -21,7 +21,7 @@ using namespace ast;
 %define parse.error verbose
 
 // keywords
-%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
+%token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY LIMIT
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
 COUNT MAX MIN SUM AS
 // non-keywords
@@ -50,8 +50,10 @@ COUNT MAX MIN SUM AS
 %type <sv_set_clauses> setClauses
 %type <sv_cond> condition
 %type <sv_conds> whereClause optWhereClause
-%type <sv_orderby>  order_clause opt_order_clause
+%type <sv_orderby>  opt_order_clause
+%type <sv_orderbys> order_clause
 %type <sv_orderby_dir> opt_asc_desc
+%type <sv_int> opt_limit_clause
 %type <sv_agg> agg_func
 %type <sv_aggs> agg_list
 
@@ -152,13 +154,13 @@ dml:
     {
         $$ = std::make_shared<UpdateStmt>($2, $4, $5);
     }
-    |   SELECT selector FROM tableList optWhereClause opt_order_clause
+    |   SELECT selector FROM tableList optWhereClause opt_order_clause opt_limit_clause
     {
-        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+        $$ = std::make_shared<SelectStmt>($2, $4, $5, $6, $7);
     }
-    |   SELECT agg_list FROM tableList optWhereClause opt_order_clause
+    |   SELECT agg_list FROM tableList optWhereClause opt_order_clause opt_limit_clause
     {
-        $$ = std::make_shared<SelectStmt>(std::vector<std::shared_ptr<Col>>{}, $4, $5, $6, $2);
+        $$ = std::make_shared<SelectStmt>(std::vector<std::shared_ptr<Col>>{}, $4, $5, $6, $7, $2);
     }
     ;
 
@@ -408,7 +410,7 @@ tableList:
 opt_order_clause:
     ORDER BY order_clause      
     { 
-        $$ = $3; 
+        $$ = std::make_shared<OrderBy>($3);
     }
     |   /* epsilon */ { /* ignore*/ }
     ;
@@ -416,7 +418,11 @@ opt_order_clause:
 order_clause:
       col  opt_asc_desc 
     { 
-        $$ = std::make_shared<OrderBy>($1, $2);
+        $$ = std::vector<std::shared_ptr<OrderByCol>>{std::make_shared<OrderByCol>($1, $2)};
+    }
+    |   order_clause ',' col opt_asc_desc
+    {
+        $$.push_back(std::make_shared<OrderByCol>($3, $4));
     }
     ;   
 
@@ -425,6 +431,17 @@ opt_asc_desc:
     |  DESC      { $$ = OrderBy_DESC;    }
     |       { $$ = OrderBy_DEFAULT; }
     ;    
+
+opt_limit_clause:
+    LIMIT VALUE_INT
+    {
+        $$ = $2;
+    }
+    |   /* epsilon */
+    {
+        $$ = -1;
+    }
+    ;
 
 tbName: IDENTIFIER;
 

@@ -37,7 +37,13 @@ class Query{
     
     // 聚合函数
     std::vector<std::shared_ptr<ast::AggExpr>> agg_funcs;
-
+    
+    // ORDER BY 排序列
+    std::vector<TabCol> orderby_cols;
+    // 排序方向（true表示降序）
+    std::vector<bool> orderby_desc;
+    // LIMIT数量，-1表示无限制
+    int limit_count = -1;
 
     std::string index_tab_name;                    // show index 的表名
     std::string create_index_tab_name;             // create index 的表名

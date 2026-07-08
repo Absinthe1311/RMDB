@@ -88,6 +88,20 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         //处理where条件
         get_clause(x->conds, query->conds);
         check_clause(query->tables, query->conds);
+        
+        // 处理ORDER BY
+        if (x->order != nullptr) {
+            for (auto &orderby_col : x->order->order_by_cols) {
+                TabCol col = {.tab_name = orderby_col->col->tab_name, 
+                              .col_name = orderby_col->col->col_name};
+                col = check_column(all_cols, col);
+                query->orderby_cols.push_back(col);
+                query->orderby_desc.push_back(orderby_col->orderby_dir == ast::OrderBy_DESC);
+            }
+        }
+        
+        // 处理LIMIT
+        query->limit_count = x->limit;
     } else if (auto x = std::dynamic_pointer_cast<ast::UpdateStmt>(parse)) {
         /** TODO: */
         // 表名单独处理（UpdateStmt通常只涉及一张表）

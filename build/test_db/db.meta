@@ -1,8 +1,8 @@
 test_db
 1
-t
+orders
 2
-t a 0 4 0 0
-t b 2 9 4 0
+orders company 2 10 0 0
+orders order_number 0 4 10 0
 0
 

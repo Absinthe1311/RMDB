@@ -18,31 +18,66 @@ See the Mulan PSL v2 for more details. */
 class SortExecutor : public AbstractExecutor {
    private:
     std::unique_ptr<AbstractExecutor> prev_;
-    ColMeta cols_;                              // 框架中只支持一个键排序，需要自行修改数据结构支持多个键排序
-    size_t tuple_num;
-    bool is_desc_;
-    std::vector<size_t> used_tuple;
-    std::unique_ptr<RmRecord> current_tuple;
+    std::vector<ColMeta> order_cols_;
+    std::vector<bool> is_desc_;
+    std::vector<std::unique_ptr<RmRecord>> records_;
+    size_t current_pos_;
 
    public:
-    SortExecutor(std::unique_ptr<AbstractExecutor> prev, TabCol sel_cols, bool is_desc) {
+    SortExecutor(std::unique_ptr<AbstractExecutor> prev, 
+                 const std::vector<TabCol> &orderby_cols,
+                 const std::vector<bool> &is_desc) {
         prev_ = std::move(prev);
-        cols_ = prev_->get_col_offset(sel_cols);
+        auto &prev_cols = prev_->cols();
+        for (auto &col : orderby_cols) {
+            auto pos = get_col(prev_cols, col);
+            order_cols_.push_back(*pos);
+        }
         is_desc_ = is_desc;
-        tuple_num = 0;
-        used_tuple.clear();
+        current_pos_ = 0;
     }
 
-    void beginTuple() override { 
-        
+    void beginTuple() override {
+        records_.clear();
+        for (prev_->beginTuple(); !prev_->is_end(); prev_->nextTuple()) {
+            records_.push_back(prev_->Next());
+        }
+
+        std::stable_sort(records_.begin(), records_.end(),
+            [this](const std::unique_ptr<RmRecord> &a, const std::unique_ptr<RmRecord> &b) {
+                for (size_t i = 0; i < order_cols_.size(); i++) {
+                    auto &col = order_cols_[i];
+                    int cmp = compare(a->data + col.offset, b->data + col.offset, col.len, col.type);
+                    if (cmp != 0) {
+                        return is_desc_[i] ? (cmp > 0) : (cmp < 0);
+                    }
+                }
+                return false;
+            });
+
+        current_pos_ = 0;
     }
 
     void nextTuple() override {
-        
+        current_pos_++;
     }
 
     std::unique_ptr<RmRecord> Next() override {
-        return nullptr;
+        auto rec = std::make_unique<RmRecord>(records_[current_pos_]->size);
+        memcpy(rec->data, records_[current_pos_]->data, records_[current_pos_]->size);
+        return rec;
+    }
+
+    bool is_end() const override {
+        return current_pos_ >= records_.size();
+    }
+
+    const std::vector<ColMeta> &cols() const override {
+        return prev_->cols();
+    }
+
+    size_t tupleLen() const override {
+        return prev_->tupleLen();
     }
 
     Rid &rid() override { return _abstract_rid; }
