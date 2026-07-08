@@ -32,6 +32,13 @@ enum OrderByDir {
     OrderBy_DESC
 };
 
+enum AggType {
+    AGG_COUNT,
+    AGG_MAX,
+    AGG_MIN,
+    AGG_SUM
+};
+
 // Base class for tree nodes
 struct TreeNode {
     virtual ~TreeNode() = default;  // enable polymorphism
@@ -153,6 +160,19 @@ struct Col : public Expr {
             tab_name(std::move(tab_name_)), col_name(std::move(col_name_)) {}
 };
 
+struct AggExpr : public TreeNode {
+    AggType agg_type;
+    std::string tab_name;
+    std::string col_name;
+    bool is_count_star;
+    std::string alias;
+
+    AggExpr(AggType agg_type_, std::string tab_name_, std::string col_name_, 
+            bool is_count_star_ = false, std::string alias_ = "") :
+            agg_type(agg_type_), tab_name(std::move(tab_name_)), col_name(std::move(col_name_)),
+            is_count_star(is_count_star_), alias(std::move(alias_)) {}
+};
+
 struct SetClause : public TreeNode {
     std::string col_name;
     std::shared_ptr<Value> val;
@@ -225,14 +245,17 @@ struct SelectStmt : public TreeNode {
     
     bool has_sort;
     std::shared_ptr<OrderBy> order;
+    
+    std::vector<std::shared_ptr<AggExpr>> agg_funcs;
 
 
     SelectStmt(std::vector<std::shared_ptr<Col>> cols_,
                std::vector<std::string> tabs_,
                std::vector<std::shared_ptr<BinaryExpr>> conds_,
-               std::shared_ptr<OrderBy> order_) :
+               std::shared_ptr<OrderBy> order_,
+               std::vector<std::shared_ptr<AggExpr>> agg_funcs_ = {}) :
             cols(std::move(cols_)), tabs(std::move(tabs_)), conds(std::move(conds_)), 
-            order(std::move(order_)) {
+            order(std::move(order_)), agg_funcs(std::move(agg_funcs_)) {
                 has_sort = (bool)order;
             }
 };
@@ -270,6 +293,9 @@ struct SemValue {
     std::vector<std::shared_ptr<BinaryExpr>> sv_conds;
 
     std::shared_ptr<OrderBy> sv_orderby;
+    
+    std::shared_ptr<AggExpr> sv_agg;
+    std::vector<std::shared_ptr<AggExpr>> sv_aggs;
 };
 
 extern std::shared_ptr<ast::TreeNode> parse_tree;

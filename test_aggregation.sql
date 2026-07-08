@@ -1,0 +1,15 @@
+create table aggregate (id int,val float);
+insert into aggregate values(1,5.5);
+insert into aggregate values(3,4.5);
+insert into aggregate values(5,10.0);
+select SUM(id) as sum_id from aggregate;
+select SUM(val) as sum_val from aggregate;
+select MAX(id) as max_id from aggregate;
+select MIN(val) as min_val from aggregate;
+create table aggregate2 (id int,name char(8),val float);
+insert into aggregate2 values (1,'qwerasdf',1.0);
+insert into aggregate2 values (2,'qwerasdf',2.0);
+insert into aggregate2 values (3,'uiophjkl',2.0);
+select COUNT(*) as count_row from aggregate2;
+select COUNT(id) as count_id from aggregate2;
+select COUNT(name) as count_name from aggregate2 where val = 2.0;

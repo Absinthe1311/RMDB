@@ -10,6 +10,9 @@ See the Mulan PSL v2 for more details. */
 
 #include "execution_manager.h"
 
+#include <iomanip>
+#include <sstream>
+
 #include "executor_delete.h"
 #include "executor_index_scan.h"
 #include "executor_insert.h"
@@ -17,6 +20,7 @@ See the Mulan PSL v2 for more details. */
 #include "executor_projection.h"
 #include "executor_seq_scan.h"
 #include "executor_update.h"
+#include "executor_aggregation.h"
 #include "index/ix.h"
 #include "record_printer.h"
 
@@ -135,6 +139,76 @@ void QlManager::run_cmd_utility(std::shared_ptr<Plan> plan, txn_id_t *txn_id, Co
 // 执行select语句，select语句的输出除了需要返回客户端外，还需要写入output.txt文件中
 void QlManager::select_from(std::unique_ptr<AbstractExecutor> executorTreeRoot, std::vector<TabCol> sel_cols, 
                             Context *context) {
+    // 检查是否是聚合执行器
+    auto agg_executor = dynamic_cast<AggregationExecutor*>(executorTreeRoot.get());
+    
+    if (agg_executor) {
+        // 处理聚合查询
+        std::vector<std::string> captions;
+        auto &cols = agg_executor->cols();
+        captions.reserve(cols.size());
+        for (auto &col : cols) {
+            captions.push_back(col.name);
+        }
+        
+        // Print header into buffer
+        RecordPrinter rec_printer(cols.size());
+        rec_printer.print_separator(context);
+        rec_printer.print_record(captions, context);
+        rec_printer.print_separator(context);
+        
+        // print header into file
+        std::fstream outfile;
+        outfile.open("output.txt", std::ios::out | std::ios::app);
+        outfile << "|";
+        for(int i = 0; i < captions.size(); ++i) {
+            outfile << " " << captions[i] << " |";
+        }
+        outfile << "\n";
+        
+        // 执行聚合计算
+        agg_executor->beginTuple();
+        auto &agg_results = agg_executor->get_agg_results();
+        
+        std::vector<std::string> columns;
+        for (size_t i = 0; i < agg_results.size(); ++i) {
+            std::string col_str;
+            if (cols[i].type == TYPE_INT) {
+                col_str = std::to_string(agg_results[i].int_val);
+            } else if (cols[i].type == TYPE_FLOAT) {
+                std::ostringstream oss;
+                oss << std::fixed << std::setprecision(6) << agg_results[i].float_val;
+                col_str = oss.str();
+            } else if (cols[i].type == TYPE_BIGINT) {
+                col_str = std::to_string(agg_results[i].bigint_val);
+            } else if (cols[i].type == TYPE_STRING) {
+                // 字符串类型：从raw数据中提取
+                col_str = std::string(agg_results[i].raw->data, cols[i].len);
+                // 去除末尾的空字符
+                col_str.resize(strlen(col_str.c_str()));
+            }
+            columns.push_back(col_str);
+        }
+        
+        // print record into buffer
+        rec_printer.print_record(columns, context);
+        // print record into file
+        outfile << "|";
+        for(int i = 0; i < columns.size(); ++i) {
+            outfile << " " << columns[i] << " |";
+        }
+        outfile << "\n";
+        outfile.close();
+        
+        // Print footer into buffer
+        rec_printer.print_separator(context);
+        // Print record count into buffer
+        RecordPrinter::print_record_count(1, context);
+        
+        return;
+    }
+    
+    // 原有的非聚合查询逻辑
     std::vector<std::string> captions;
     captions.reserve(sel_cols.size());
     for (auto &sel_col : sel_cols) {

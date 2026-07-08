@@ -381,8 +381,17 @@ std::shared_ptr<Plan> Planner::generate_select_plan(std::shared_ptr<Query> query
     //物理优化
     auto sel_cols = query->cols;
     std::shared_ptr<Plan> plannerRoot = physical_optimization(query, context);
-    plannerRoot = std::make_shared<ProjectionPlan>(T_Projection, std::move(plannerRoot), 
+    
+    // 检查是否有聚合函数
+    if (!query->agg_funcs.empty()) {
+        // 生成聚合计划
+        plannerRoot = std::make_shared<AggregationPlan>(T_Aggregation, std::move(plannerRoot), 
+                                                        query->agg_funcs);
+    } else {
+        // 生成投影计划
+        plannerRoot = std::make_shared<ProjectionPlan>(T_Projection, std::move(plannerRoot), 
                                                         std::move(sel_cols));
+    }
 
     return plannerRoot;
 }

@@ -23,6 +23,7 @@ using namespace ast;
 // keywords
 %token SHOW TABLES CREATE TABLE DROP DESC INSERT INTO VALUES DELETE FROM ASC ORDER BY
 WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP TXN_BEGIN TXN_COMMIT TXN_ABORT TXN_ROLLBACK ORDER_BY
+COUNT MAX MIN SUM AS
 // non-keywords
 %token LEQ NEQ GEQ T_EOF
 
@@ -51,6 +52,8 @@ WHERE UPDATE SET SELECT INT BIGINT DATETIME CHAR FLOAT INDEX AND JOIN EXIT HELP 
 %type <sv_conds> whereClause optWhereClause
 %type <sv_orderby>  order_clause opt_order_clause
 %type <sv_orderby_dir> opt_asc_desc
+%type <sv_agg> agg_func
+%type <sv_aggs> agg_list
 
 %%
 start:
@@ -152,6 +155,10 @@ dml:
     |   SELECT selector FROM tableList optWhereClause opt_order_clause
     {
         $$ = std::make_shared<SelectStmt>($2, $4, $5, $6);
+    }
+    |   SELECT agg_list FROM tableList optWhereClause opt_order_clause
+    {
+        $$ = std::make_shared<SelectStmt>(std::vector<std::shared_ptr<Col>>{}, $4, $5, $6, $2);
     }
     ;
 
@@ -347,6 +354,40 @@ selector:
         $$ = {};
     }
     |   colList
+    ;
+
+agg_list:
+        agg_func
+    {
+        $$ = std::vector<std::shared_ptr<AggExpr>>{$1};
+    }
+    |   agg_list ',' agg_func
+    {
+        $$.push_back($3);
+    }
+    ;
+
+agg_func:
+        COUNT '(' '*' ')' AS IDENTIFIER
+    {
+        $$ = std::make_shared<AggExpr>(AGG_COUNT, "", "", true, $6);
+    }
+    |   COUNT '(' col ')' AS IDENTIFIER
+    {
+        $$ = std::make_shared<AggExpr>(AGG_COUNT, $3->tab_name, $3->col_name, false, $6);
+    }
+    |   MAX '(' col ')' AS IDENTIFIER
+    {
+        $$ = std::make_shared<AggExpr>(AGG_MAX, $3->tab_name, $3->col_name, false, $6);
+    }
+    |   MIN '(' col ')' AS IDENTIFIER
+    {
+        $$ = std::make_shared<AggExpr>(AGG_MIN, $3->tab_name, $3->col_name, false, $6);
+    }
+    |   SUM '(' col ')' AS IDENTIFIER
+    {
+        $$ = std::make_shared<AggExpr>(AGG_SUM, $3->tab_name, $3->col_name, false, $6);
+    }
     ;
 
 tableList:

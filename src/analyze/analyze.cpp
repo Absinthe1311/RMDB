@@ -29,7 +29,43 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
                 throw TableNotFoundError(tab_name);
             }
         }
-        // 处理target list，再target list中添加上表名，例如 a.id
+        
+        // 处理聚合函数
+        query->agg_funcs = x->agg_funcs;
+        if (!query->agg_funcs.empty()) {
+            // 检查聚合函数的合法性
+            std::vector<ColMeta> all_cols;
+            get_all_cols(query->tables, all_cols);
+            
+            for (auto &agg : query->agg_funcs) {
+                if (agg->is_count_star) {
+                    // COUNT(*) 不需要检查列
+                    continue;
+                }
+                
+                // 检查列是否存在
+                TabCol col = {.tab_name = agg->tab_name, .col_name = agg->col_name};
+                col = check_column(all_cols, col);
+                agg->tab_name = col.tab_name;
+                agg->col_name = col.col_name;
+                
+                // 获取列的类型
+                TabMeta &tab = sm_manager_->db_.get_table(col.tab_name);
+                auto col_meta = tab.get_col(col.col_name);
+                ColType col_type = col_meta->type;
+                
+                // 检查类型兼容性
+                if (agg->agg_type == ast::AGG_SUM) {
+                    // SUM只支持int和float
+                    if (col_type != TYPE_INT && col_type != TYPE_FLOAT && col_type != TYPE_BIGINT) {
+                        throw IncompatibleTypeError(coltype2str(col_type), "int or float");
+                    }
+                }
+                // COUNT, MAX, MIN 支持所有类型
+            }
+        }
+        
+        //处理target list，再target list中添加上表名，例如 a.id
         for (auto &sv_sel_col : x->cols) {
             TabCol sel_col = {.tab_name = sv_sel_col->tab_name, .col_name = sv_sel_col->col_name};
             query->cols.push_back(sel_col);
@@ -37,13 +73,13 @@ std::shared_ptr<Query> Analyze::do_analyze(std::shared_ptr<ast::TreeNode> parse)
         
         std::vector<ColMeta> all_cols;
         get_all_cols(query->tables, all_cols);
-        if (query->cols.empty()) {
+        if (query->cols.empty() && query->agg_funcs.empty()) {
             // select all columns
             for (auto &col : all_cols) {
                 TabCol sel_col = {.tab_name = col.tab_name, .col_name = col.name};
                 query->cols.push_back(sel_col);
             }
-        } else {
+        } else if (!query->cols.empty()) {
             // infer table name from column name
             for (auto &sel_col : query->cols) {
                 sel_col = check_column(all_cols, sel_col);  // 列元数据校验

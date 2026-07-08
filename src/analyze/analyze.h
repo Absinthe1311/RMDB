@@ -34,6 +34,9 @@ class Query{
     std::vector<SetClause> set_clauses;
     //insert 的values值
     std::vector<Value> values;
+    
+    // 聚合函数
+    std::vector<std::shared_ptr<ast::AggExpr>> agg_funcs;
 
 
     std::string index_tab_name;                    // show index 的表名

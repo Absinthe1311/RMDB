@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "execution/executor_insert.h"
 #include "execution/executor_delete.h"
 #include "execution/execution_sort.h"
+#include "execution/executor_aggregation.h"
 #include "common/common.h"
 
 typedef enum portalTag{
@@ -67,9 +68,19 @@ class Portal
             switch(x->tag) {
                 case T_select:
                 {
-                    std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
-                    std::unique_ptr<AbstractExecutor> root= convert_plan_executor(p, context);
-                    return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(p->sel_cols_), std::move(root), plan);
+                    std::vector<TabCol> sel_cols;
+                    std::unique_ptr<AbstractExecutor> root;
+                    
+                    // 检查是否是聚合计划
+                    if (auto agg_plan = std::dynamic_pointer_cast<AggregationPlan>(x->subplan_)) {
+                        root = convert_plan_executor(agg_plan, context);
+                        return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(sel_cols), std::move(root), plan);
+                    } else {
+                        // 投影计划
+                        std::shared_ptr<ProjectionPlan> p = std::dynamic_pointer_cast<ProjectionPlan>(x->subplan_);
+                        root = convert_plan_executor(p, context);
+                        return std::make_shared<PortalStmt>(PORTAL_ONE_SELECT, std::move(p->sel_cols_), std::move(root), plan);
+                    }
                 }
                     
                 case T_Update:
@@ -158,6 +169,9 @@ class Portal
         if(auto x = std::dynamic_pointer_cast<ProjectionPlan>(plan)){
             return std::make_unique<ProjectionExecutor>(convert_plan_executor(x->subplan_, context), 
                                                         x->sel_cols_);
+        } else if(auto x = std::dynamic_pointer_cast<AggregationPlan>(plan)) {
+            return std::make_unique<AggregationExecutor>(convert_plan_executor(x->subplan_, context),
+                                                         x->agg_exprs_, context, sm_manager_);
         } else if(auto x = std::dynamic_pointer_cast<ScanPlan>(plan)) {
             if(x->tag == T_SeqScan) {
                 return std::make_unique<SeqScanExecutor>(sm_manager_, x->tab_name_, x->conds_, context);
