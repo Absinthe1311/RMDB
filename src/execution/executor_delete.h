@@ -1,0 +1,117 @@
+/* Copyright (c) 2023 Renmin University of China
+RMDB is licensed under Mulan PSL v2.
+You can use this software according to the terms and conditions of the Mulan PSL v2.
+You may obtain a copy of Mulan PSL v2 at:
+        http://license.coscl.org.cn/MulanPSL2
+THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+See the Mulan PSL v2 for more details. */
+
+#pragma once
+#include "execution_defs.h"
+#include "execution_manager.h"
+#include "executor_abstract.h"
+#include "index/ix.h"
+#include "system/sm.h"
+#include "recovery/log_manager.h"
+
+class DeleteExecutor : public AbstractExecutor {
+   private:
+    TabMeta tab_;                   // 表的元数据
+    std::vector<Condition> conds_;  // delete的条件
+    RmFileHandle *fh_;              // 表的数据文件句柄
+    std::vector<Rid> rids_;         // 需要删除的记录的位置
+    std::string tab_name_;          // 表名称
+    SmManager *sm_manager_;
+
+   public:
+    DeleteExecutor(SmManager *sm_manager, const std::string &tab_name, std::vector<Condition> conds,
+                   std::vector<Rid> rids, Context *context) {
+        sm_manager_ = sm_manager;
+        tab_name_ = tab_name;
+        tab_ = sm_manager_->db_.get_table(tab_name);
+        fh_ = sm_manager_->fhs_.at(tab_name).get();
+        conds_ = conds;
+        rids_ = rids;
+        context_ = context;
+    }
+
+    std::unique_ptr<RmRecord> Next() override {
+        // 加表级意向排他锁（IX锁），防止幻读
+        if(context_->txn_ != nullptr) {
+            context_->lock_mgr_->lock_IX_on_table(
+                context_->txn_, 
+                fh_->GetFd()
+            );
+        }
+        
+        for (auto &rid : rids_) {
+            // 加行级排他锁
+            if(context_->txn_ != nullptr) {
+                context_->lock_mgr_->lock_exclusive_on_record(
+                    context_->txn_, 
+                    rid, 
+                    fh_->GetFd()
+                );
+            }
+            
+            // 先获取被删除的记录值（用于回滚）
+            auto rec = fh_->get_record(rid, context_);
+            
+            // 记录DELETE日志
+            if(context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
+                RmRecord delete_value(rec->size);
+                memcpy(delete_value.data, rec->data, rec->size);
+                
+                DeleteLogRecord delete_log(
+                    context_->txn_->get_transaction_id(),
+                    delete_value,
+                    rid,
+                    tab_name_
+                );
+                delete_log.prev_lsn_ = context_->txn_->get_prev_lsn();
+                
+                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&delete_log);
+                context_->txn_->set_prev_lsn(lsn);
+                
+                PageId page_id{fh_->GetFd(), rid.page_no};
+                Page* page = context_->buffer_pool_manager_->fetch_page(page_id);
+                page->set_page_lsn(lsn);
+                BufferPoolManager::mark_dirty(page);
+                context_->buffer_pool_manager_->unpin_page(page_id, true);
+            }
+            
+            // 记录写操作到事务的write_set
+            if(context_->txn_ != nullptr) {
+                WriteRecord* write_record = new WriteRecord(
+                    WType::DELETE_TUPLE,
+                    tab_name_,
+                    rid,
+                    *rec
+                );
+                context_->txn_->append_write_record(write_record);
+            }
+            
+            // 先从索引中删除记录
+            for (auto &index : tab_.indexes) {
+                std::string index_name = sm_manager_->get_ix_manager()->get_index_name(tab_name_, index.cols);
+                auto ih = sm_manager_->ihs_.at(index_name).get();
+
+                char *key = new char[index.col_tot_len];
+                int offset = 0;
+                for (auto &col : index.cols) {
+                    memcpy(key + offset, rec->data + col.offset, col.len);
+                    offset += col.len;
+                }
+                ih->delete_entry(key, context_->txn_);
+                delete[] key;
+            }
+
+            fh_->delete_record(rid, context_);
+        }
+        return nullptr;
+    }
+
+    Rid &rid() override { return _abstract_rid; }
+};
