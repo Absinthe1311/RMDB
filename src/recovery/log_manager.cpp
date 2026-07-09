@@ -9,58 +9,42 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include <cstring>
+#include <unistd.h>
+#include <vector>
 #include "log_manager.h"
 
-/**
- * @description: 添加日志记录到日志缓冲区中，并返回日志记录号
- * @param {LogRecord*} log_record 要写入缓冲区的日志记录
- * @return {lsn_t} 返回该日志的日志记录号
- */
 lsn_t LogManager::add_log_to_buffer(LogRecord* log_record) {
+    if (log_record == nullptr) return INVALID_LSN;
+    
     std::unique_lock<std::mutex> lock(latch_);
     
-    lsn_t lsn = global_lsn_.fetch_add(1);
-    log_record->lsn_ = lsn;
-    
-    int log_size = log_record->log_tot_len_;
-    if(log_buffer_.is_full(log_size)) {
-        // 缓冲区满，先刷盘
-        disk_manager_->write_log(log_buffer_.buffer_, log_buffer_.offset_);
-        persist_lsn_ = global_lsn_ - 1;
-        log_buffer_.offset_ = 0;
-        memset(log_buffer_.buffer_, 0, LOG_BUFFER_SIZE);
+    if (log_buffer_.is_full(static_cast<int>(log_record->log_tot_len_))) {
+        lock.unlock();
+        flush_log_to_disk();
+        lock.lock();
     }
     
-    char* dest = log_buffer_.buffer_ + log_buffer_.offset_;
-    log_record->serialize(dest);
-    log_buffer_.offset_ += log_size;
+    log_record->lsn_ = global_lsn_++;
+    std::vector<char> data(log_record->log_tot_len_);
+    log_record->serialize(data.data());
+    memcpy(log_buffer_.buffer_ + log_buffer_.offset_, data.data(), log_record->log_tot_len_);
+    log_buffer_.offset_ += log_record->log_tot_len_;
     
-    // 关键修复：每次记录日志后立即刷盘
-    // 这样可以保证kill -9时日志不会丢失
-    disk_manager_->write_log(log_buffer_.buffer_, log_buffer_.offset_);
-    persist_lsn_ = lsn;
-    
-    // 清空缓冲区
-    log_buffer_.offset_ = 0;
-    memset(log_buffer_.buffer_, 0, LOG_BUFFER_SIZE);
-    
-    return lsn;
+    return log_record->lsn_;
 }
 
-/**
- * @description: 把日志缓冲区的内容刷到磁盘中，由于目前只设置了一个缓冲区，因此需要阻塞其他日志操作
- */
 void LogManager::flush_log_to_disk() {
     std::unique_lock<std::mutex> lock(latch_);
     
-    if(log_buffer_.offset_ == 0) {
-        return;
-    }
+    if (log_buffer_.offset_ == 0) return;
     
     disk_manager_->write_log(log_buffer_.buffer_, log_buffer_.offset_);
     
-    persist_lsn_ = global_lsn_ - 1;
+    if (disk_manager_->GetLogFd() != -1) {
+        fsync(disk_manager_->GetLogFd());
+    }
     
+    persist_lsn_ = global_lsn_ - 1;
+    memset(log_buffer_.buffer_, 0, sizeof(log_buffer_.buffer_));
     log_buffer_.offset_ = 0;
-    memset(log_buffer_.buffer_, 0, LOG_BUFFER_SIZE);
 }

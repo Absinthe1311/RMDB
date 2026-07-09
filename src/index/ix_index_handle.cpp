@@ -562,33 +562,6 @@ page_id_t IxIndexHandle::insert_entry(const char *key, const Rid &value, Transac
     // 2. 在该叶子节点中插入键值对
     // 3. 如果结点已满，分裂结点，并把新结点的相关信息插入父节点
     // 提示：记得unpin page；若当前叶子节点是最右叶子节点，则需要更新file_hdr_.last_leaf；记得处理并发的上锁
-    
-    // 特殊情况：空树（root=-1），需要重新初始化根节点
-    if(file_hdr_->root_page_ == IX_NO_PAGE) {
-        std::cerr << "[insert_entry] Empty tree detected, creating new root" << std::endl;
-        
-        // 创建新的根节点
-        IxNodeHandle *new_root = create_node();
-        new_root->page_hdr->parent = IX_NO_PAGE;
-        new_root->page_hdr->is_leaf = true;
-        new_root->page_hdr->num_key = 0;
-        new_root->page_hdr->prev_leaf = IX_LEAF_HEADER_PAGE;
-        new_root->page_hdr->next_leaf = IX_LEAF_HEADER_PAGE;
-        
-        // 更新文件头
-        update_root_page_no(new_root->get_page_no());
-        file_hdr_->first_leaf_ = new_root->get_page_no();
-        file_hdr_->last_leaf_ = new_root->get_page_no();
-        
-        // 更新叶子链表头
-        IxNodeHandle *leaf_header = fetch_node(IX_LEAF_HEADER_PAGE);
-        leaf_header->page_hdr->prev_leaf = new_root->get_page_no();
-        leaf_header->page_hdr->next_leaf = new_root->get_page_no();
-        buffer_pool_manager_->unpin_page(leaf_header->get_page_id(), true);
-        
-        buffer_pool_manager_->unpin_page(new_root->get_page_id(), true);
-    }
-    
     // 1. 查找应该插入的叶子节点
     auto [leaf, root_is_latched] = find_leaf_page(key, Operation::INSERT, transaction);
     
@@ -1209,4 +1182,28 @@ void IxIndexHandle::print_btree_structure() {
     
     buffer_pool_manager_->unpin_page(root->get_page_id(), false);
     std::cerr << "========================================\n" << std::endl;
+}
+
+void IxIndexHandle::clear_entries() {
+    buffer_pool_manager_->flush_all_pages(fd_);
+    
+    file_hdr_->root_page_ = IX_INIT_ROOT_PAGE;
+    file_hdr_->first_leaf_ = IX_INIT_ROOT_PAGE;
+    file_hdr_->last_leaf_ = IX_INIT_ROOT_PAGE;
+    file_hdr_->num_pages_ = IX_INIT_NUM_PAGES;
+    
+    IxNodeHandle root = IxNodeHandle(file_hdr_, buffer_pool_manager_->fetch_page(PageId{fd_, IX_INIT_ROOT_PAGE}));
+    root.page_hdr->parent = INVALID_PAGE_ID;
+    root.page_hdr->num_key = 0;
+    root.page_hdr->is_leaf = true;
+    root.page_hdr->next_leaf = INVALID_PAGE_ID;
+    root.page_hdr->prev_leaf = INVALID_PAGE_ID;
+    
+    BufferPoolManager::mark_dirty(root.page);
+    buffer_pool_manager_->unpin_page(root.page->get_page_id(), true);
+    
+    char *buf = new char[file_hdr_->tot_len_];
+    file_hdr_->serialize(buf);
+    disk_manager_->write_page(fd_, IX_FILE_HDR_PAGE, buf, file_hdr_->tot_len_);
+    delete[] buf;
 }

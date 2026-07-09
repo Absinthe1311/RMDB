@@ -12,34 +12,20 @@ See the Mulan PSL v2 for more details. */
 #include "record/rm_file_handle.h"
 #include "system/sm_manager.h"
 #include "index/ix.h"
+#include "recovery/log_manager.h"
 
 std::unordered_map<txn_id_t, Transaction *> TransactionManager::txn_map = {};
 
-/**
- * @description: 事务的开始方法
- * @return {Transaction*} 开始事务的指针
- * @param {Transaction*} txn 事务指针，空指针代表需要创建新事务，否则开始已有事务
- * @param {LogManager*} log_manager 日志管理器指针
- */
 Transaction * TransactionManager::begin(Transaction* txn, LogManager* log_manager) {
-    // Todo:
-    // 1. 判断传入事务参数是否为空指针
-    // 2. 如果为空指针，创建新事务
-    // 3. 把开始事务加入到全局事务表中
-    // 4. 返回当前事务指针
-    // 1. 判断传入事务参数是否为空指针
     if (txn == nullptr) {
-        // 2. 如果为空指针，创建新事务，分配一个新的事务号
         txn_id_t txn_id = next_txn_id_++;
         txn = new Transaction(txn_id);
     }
 
-    // 3. 把开始事务加入到全局事务表中
     std::unique_lock<std::mutex> lock(latch_);
     txn_map[txn->get_transaction_id()] = txn;
     lock.unlock();
 
-    // 记录BEGIN日志
     if (log_manager != nullptr) {
         BeginLogRecord begin_log(txn->get_transaction_id());
         begin_log.prev_lsn_ = txn->get_prev_lsn();
@@ -47,7 +33,6 @@ Transaction * TransactionManager::begin(Transaction* txn, LogManager* log_manage
         txn->set_prev_lsn(lsn);
     }
 
-    // 4. 返回当前事务指针
     return txn;
 }
 

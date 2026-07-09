@@ -217,6 +217,8 @@ class IxIndexHandle {
     
     // 打印B+树结构（用于调试）
     void print_btree_structure();
+    
+    void clear_entries();
 
    private:
     // 辅助函数

@@ -116,7 +116,6 @@ void *client_handler(void *sock_fd) {
 
         // 开启事务，初始化系统所需的上下文信息（包括事务对象指针、锁管理器指针、日志管理器指针、存放结果的buffer、记录结果长度的变量）
         Context *context = new Context(lock_manager.get(), log_manager.get(), nullptr, data_send, &offset);
-        context->buffer_pool_manager_ = buffer_pool_manager.get();
         SetTransaction(&txn_id, context);
 
         // 用于判断是否已经调用了yy_delete_buffer来删除buf
@@ -351,16 +350,6 @@ int main(int argc, char **argv) {
         recovery->analyze();
         recovery->redo();
         recovery->undo();
-        
-        // 清空日志文件（恢复完成后）
-        int log_fd = disk_manager->GetLogFd();
-        if(log_fd != -1) {
-            // 关闭旧的日志文件
-            close(log_fd);
-            // 创建新的空日志文件
-            int new_log_fd = open(LOG_FILE_NAME.c_str(), O_RDWR | O_CREAT | O_TRUNC, 0644);
-            disk_manager->SetLogFd(new_log_fd);
-        }
         
         // 开启服务端，开始接受客户端连接
         start_server();

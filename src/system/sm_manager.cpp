@@ -98,6 +98,19 @@ void SmManager::open_db(const std::string& db_name) {
     // 3. 读取并恢复数据库元数据
     std::ifstream ifs(DB_META_NAME);
     ifs >> db_;   // 依赖已经定义好的 operator>>，将文件内容反序列化到 db_ 中
+    
+    std::cerr << "\n========== OPEN_DB METADATA ==========" << std::endl;
+    std::cerr << "Database: " << db_.name_ << std::endl;
+    std::cerr << "Tables: " << db_.tabs_.size() << std::endl;
+    for (auto &entry : db_.tabs_) {
+        std::cerr << "Table: " << entry.first << std::endl;
+        std::cerr << "  Columns: " << entry.second.cols.size() << std::endl;
+        std::cerr << "  Indexes: " << entry.second.indexes.size() << std::endl;
+        for (auto &idx : entry.second.indexes) {
+            std::cerr << "    - " << idx.tab_name << " (cols=" << idx.col_num << ")" << std::endl;
+        }
+    }
+    std::cerr << "======================================\n" << std::endl;
 
     // 4. 为每张表打开对应的记录文件句柄
     for (auto &entry : db_.tabs_) {
@@ -115,12 +128,6 @@ void SmManager::open_db(const std::string& db_name) {
                 ihs_.emplace(index_name, ix_manager_->open_index(tab.name, index_meta.cols));
             }
         }
-    }
-    
-    // 6. 打开日志文件（如果存在）
-    if(disk_manager_->is_file(LOG_FILE_NAME)) {
-        int log_fd = disk_manager_->open_file(LOG_FILE_NAME);
-        disk_manager_->SetLogFd(log_fd);
     }
 }
 

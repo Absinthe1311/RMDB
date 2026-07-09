@@ -74,12 +74,26 @@ Rid RmFileHandle::insert_record(char* buf, Context* context) {
  * @param {char*} buf 要插入记录的数据
  */
 void RmFileHandle::insert_record(const Rid& rid, char* buf) {
+    while (rid.page_no >= file_hdr_.num_pages) {
+        RmPageHandle new_page = create_new_page_handle();
+        buffer_pool_manager_->unpin_page(new_page.page->get_page_id(), true);
+    }
+
     RmPageHandle page_handle = fetch_page_handle(rid.page_no);
 
+    bool was_free = !Bitmap::is_set(page_handle.bitmap, rid.slot_no);
     Bitmap::set(page_handle.bitmap, rid.slot_no);
     char *slot = page_handle.get_slot(rid.slot_no);
     memcpy(slot, buf, file_hdr_.record_size);
-    page_handle.page_hdr->num_records++;
+    
+    if (was_free) {
+        page_handle.page_hdr->num_records++;
+        if (page_handle.page_hdr->num_records == file_hdr_.num_records_per_page &&
+            file_hdr_.first_free_page_no == rid.page_no) {
+            file_hdr_.first_free_page_no = page_handle.page_hdr->next_free_page_no;
+            page_handle.page_hdr->next_free_page_no = RM_NO_PAGE;
+        }
+    }
 
     buffer_pool_manager_->unpin_page(page_handle.page->get_page_id(), true);
 }

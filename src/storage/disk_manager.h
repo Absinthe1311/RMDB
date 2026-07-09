@@ -73,22 +73,6 @@ class DiskManager {
 
     int GetLogFd() { return log_fd_; }
 
-    int GetLogSize() {
-        if(log_fd_ == -1) {
-            // 日志文件未打开，尝试打开
-            if(is_file(LOG_FILE_NAME)) {
-                log_fd_ = open_file(LOG_FILE_NAME);
-            } else {
-                return 0;  // 日志文件不存在
-            }
-        }
-        struct stat st;
-        if(fstat(log_fd_, &st) != 0) {
-            return 0;
-        }
-        return st.st_size;
-    }
-
     /**
      * @description: 设置文件已经分配的页面个数
      * @param {int} fd 文件对应的文件句柄

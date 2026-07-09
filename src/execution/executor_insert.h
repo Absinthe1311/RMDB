@@ -15,7 +15,6 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 #include "common/datetime_util.h"
-#include "recovery/log_manager.h"
 
 class InsertExecutor : public AbstractExecutor {
    private:
@@ -91,36 +90,28 @@ class InsertExecutor : public AbstractExecutor {
         rid_ = fh_->insert_record(rec.data, context_);
         std::cerr << "insert record rid: page=" << rid_.page_no << ", slot=" << rid_.slot_no << std::endl;
         
-        // 记录INSERT日志
-        if(context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
-            RmRecord insert_value(rec.size);
-            memcpy(insert_value.data, rec.data, rec.size);
-            
-            InsertLogRecord insert_log(
-                context_->txn_->get_transaction_id(),
-                insert_value,
-                rid_,
-                tab_name_
-            );
-            insert_log.prev_lsn_ = context_->txn_->get_prev_lsn();
-            
-            lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&insert_log);
+        if (context_ != nullptr && context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
+            InsertLogRecord log(context_->txn_->get_transaction_id(), rec, rid_, tab_name_);
+            log.prev_lsn_ = context_->txn_->get_prev_lsn();
+            lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log);
             context_->txn_->set_prev_lsn(lsn);
-            
-            PageId page_id{fh_->GetFd(), rid_.page_no};
-            Page* page = context_->buffer_pool_manager_->fetch_page(page_id);
-            page->set_page_lsn(lsn);
-            BufferPoolManager::mark_dirty(page);
-            context_->buffer_pool_manager_->unpin_page(page_id, true);
         }
         
-        // 加行级排他锁
         if(context_->txn_ != nullptr) {
             context_->lock_mgr_->lock_exclusive_on_record(
                 context_->txn_, 
                 rid_, 
                 fh_->GetFd()
             );
+        }
+        
+        if(context_->txn_ != nullptr) {
+            WriteRecord* write_record = new WriteRecord(
+                WType::INSERT_TUPLE,
+                tab_name_,
+                rid_
+            );
+            context_->txn_->append_write_record(write_record);
         }
         
         // 记录写操作到事务的write_set

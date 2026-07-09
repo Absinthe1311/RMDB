@@ -15,7 +15,6 @@ See the Mulan PSL v2 for more details. */
 #include "index/ix.h"
 #include "system/sm.h"
 #include "common/datetime_util.h"
-#include "recovery/log_manager.h"
 
 class UpdateExecutor : public AbstractExecutor {
    private:
@@ -207,63 +206,8 @@ class UpdateExecutor : public AbstractExecutor {
                     }
                 }
                 
-                // 记录UPDATE日志
-                if(context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
-                    // 找到对应的旧记录
-                    std::vector<char>* old_data = nullptr;
-                    for(auto &p : old_records) {
-                        if(p.first == rid) {
-                            old_data = &p.second;
-                            break;
-                        }
-                    }
-                    
-                    if(old_data != nullptr) {
-                        RmRecord old_value(old_data->size());
-                        memcpy(old_value.data, old_data->data(), old_data->size());
-                        
-                        // 计算新值
-                        RmRecord new_value(rec->size);
-                        memcpy(new_value.data, rec->data, rec->size);
-                        for (auto &set_clause : set_clauses_) {
-                            auto col = tab_.get_col(set_clause.lhs.col_name);
-                            Value &val = set_clause.rhs;
-                            
-                            if (col->type != val.type) {
-                                if (col->type == TYPE_BIGINT && val.type == TYPE_INT) {
-                                    val.set_bigint(static_cast<int64_t>(val.int_val));
-                                } else if(col->type == TYPE_DATETIME && val.type == TYPE_STRING){
-                                    val.set_datetime(encode_datetime(val.str_val));
-                                }
-                                val.raw = nullptr;
-                            }
-                            
-                            if (val.raw == nullptr) {
-                                val.init_raw(col->len);
-                            }
-                            
-                            memcpy(new_value.data + col->offset, val.raw->data, col->len);
-                        }
-                        
-                        UpdateLogRecord update_log(
-                            context_->txn_->get_transaction_id(),
-                            old_value,
-                            new_value,
-                            rid,
-                            tab_name_
-                        );
-                        update_log.prev_lsn_ = context_->txn_->get_prev_lsn();
-                        
-                        lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&update_log);
-                        context_->txn_->set_prev_lsn(lsn);
-                        
-                        PageId page_id{fh_->GetFd(), rid.page_no};
-                        Page* page = context_->buffer_pool_manager_->fetch_page(page_id);
-                        page->set_page_lsn(lsn);
-                        BufferPoolManager::mark_dirty(page);
-                        context_->buffer_pool_manager_->unpin_page(page_id, true);
-                    }
-                }
+                RmRecord old_rec_save(rec->size);
+                memcpy(old_rec_save.data, rec->data, rec->size);
                 
                 for (auto &set_clause : set_clauses_) {
                     auto col = tab_.get_col(set_clause.lhs.col_name);
@@ -283,6 +227,13 @@ class UpdateExecutor : public AbstractExecutor {
                     }
                     
                     memcpy(rec->data + col->offset, val.raw->data, col->len);
+                }
+                
+                if (context_ != nullptr && context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
+                    UpdateLogRecord log(context_->txn_->get_transaction_id(), old_rec_save, *rec, rid, tab_name_);
+                    log.prev_lsn_ = context_->txn_->get_prev_lsn();
+                    lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log);
+                    context_->txn_->set_prev_lsn(lsn);
                 }
                 
                 fh_->update_record(rid, rec->data, context_);

@@ -14,7 +14,6 @@ See the Mulan PSL v2 for more details. */
 #include "executor_abstract.h"
 #include "index/ix.h"
 #include "system/sm.h"
-#include "recovery/log_manager.h"
 
 class DeleteExecutor : public AbstractExecutor {
    private:
@@ -59,30 +58,6 @@ class DeleteExecutor : public AbstractExecutor {
             // 先获取被删除的记录值（用于回滚）
             auto rec = fh_->get_record(rid, context_);
             
-            // 记录DELETE日志
-            if(context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
-                RmRecord delete_value(rec->size);
-                memcpy(delete_value.data, rec->data, rec->size);
-                
-                DeleteLogRecord delete_log(
-                    context_->txn_->get_transaction_id(),
-                    delete_value,
-                    rid,
-                    tab_name_
-                );
-                delete_log.prev_lsn_ = context_->txn_->get_prev_lsn();
-                
-                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&delete_log);
-                context_->txn_->set_prev_lsn(lsn);
-                
-                PageId page_id{fh_->GetFd(), rid.page_no};
-                Page* page = context_->buffer_pool_manager_->fetch_page(page_id);
-                page->set_page_lsn(lsn);
-                BufferPoolManager::mark_dirty(page);
-                context_->buffer_pool_manager_->unpin_page(page_id, true);
-            }
-            
-            // 记录写操作到事务的write_set
             if(context_->txn_ != nullptr) {
                 WriteRecord* write_record = new WriteRecord(
                     WType::DELETE_TUPLE,
@@ -91,6 +66,13 @@ class DeleteExecutor : public AbstractExecutor {
                     *rec
                 );
                 context_->txn_->append_write_record(write_record);
+            }
+            
+            if (context_ != nullptr && context_->txn_ != nullptr && context_->log_mgr_ != nullptr) {
+                DeleteLogRecord log(context_->txn_->get_transaction_id(), *rec, rid, tab_name_);
+                log.prev_lsn_ = context_->txn_->get_prev_lsn();
+                lsn_t lsn = context_->log_mgr_->add_log_to_buffer(&log);
+                context_->txn_->set_prev_lsn(lsn);
             }
             
             // 先从索引中删除记录

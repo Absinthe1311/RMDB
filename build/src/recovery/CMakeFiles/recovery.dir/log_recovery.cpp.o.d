@@ -252,4 +252,7 @@ src/recovery/CMakeFiles/recovery.dir/log_recovery.cpp.o: \
  /home/absinthe/rmdb/src/record/bitmap.h /usr/include/c++/11/cinttypes \
  /usr/include/inttypes.h /home/absinthe/rmdb/src/common/context.h \
  /home/absinthe/rmdb/src/transaction/concurrency/lock_manager.h \
- /usr/include/c++/11/condition_variable
+ /usr/include/c++/11/condition_variable /usr/include/c++/11/set \
+ /usr/include/c++/11/bits/stl_set.h \
+ /usr/include/c++/11/bits/stl_multiset.h \
+ /home/absinthe/rmdb/src/record/rm_scan.h
